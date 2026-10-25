@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Campana, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import type { Campana, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 export interface DatosIniciales {
   campanas?: Campana[];
@@ -49,6 +49,14 @@ export class RepositorioMemoria implements Repositorio {
 
   async buscarSesionPorCodigo(codigo: string) {
     return this.sesiones.get(codigo) ?? null;
+  }
+
+  async guardarEstadoSesion(sesionId: string, estado: EstadoSesion) {
+    for (const [codigo, s] of this.sesiones) if (s.id === sesionId) this.sesiones.set(codigo, { ...s, ...estado });
+  }
+
+  async avisosBase() {
+    return [];
   }
 
   async registrarEvento(nuevo: NuevoEvento) {

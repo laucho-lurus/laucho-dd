@@ -1,4 +1,4 @@
-import type { Arma, Campana, Caracteristicas, Personaje, Sesion } from './repositorio.ts';
+import type { Arma, Campana, Caracteristicas, EstadoSesion, Personaje, Sesion } from './repositorio.ts';
 import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
 import type { PerfilGm } from '../ia/perfiles.ts';
 
@@ -87,8 +87,19 @@ export class Sala {
     this.tokenGm = tokenGm;
     for (const p of personajes) this.pg.set(p.id, p.pg_actual);
     this.diagrama = campana.diagrama ?? DIAGRAMA_VACIO;
-    this.nodo = nodoInicial(this.diagrama)?.id ?? null;
-    this.vars = { ...(campana.variables ?? {}) };
+    // Si la sesión ya tenía estado guardado (servidor reiniciado), se retoma desde ahí.
+    this.nodo = buscarNodo(this.diagrama, sesion.nodo_actual ?? null)?.id ?? nodoInicial(this.diagrama)?.id ?? null;
+    this.vars = { ...(campana.variables ?? {}), ...(sesion.variables ?? {}) };
+  }
+
+  /** Lo que se guarda en la base para poder retomar la partida. */
+  estadoGuardable(): EstadoSesion {
+    return {
+      nodo_actual: this.nodo,
+      variables: this.variables(),
+      ia_pausada: this.ia?.pausada ?? false,
+      ia_perfil_id: this.ia?.perfil.id ?? null,
+    };
   }
 
   nodoActual() {

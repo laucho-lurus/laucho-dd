@@ -69,6 +69,7 @@ test('acción → la IA pide tirada → el jugador tira → la IA narra el resul
 test('pausada, la IA no responde ni gasta; reanudada vuelve', async () => {
   const { gestor, humano, jugador, codigo, llamadas } = await mesa([respuesta([usar('narrar', { texto: 'Hola' })], 'end_turn')]);
   await humano.enviar({ tipo: 'pausar_ia', pausada: true });
+  assert.equal(eventos(humano).at(-1).datos.cambio, 'ia_pausa'); // sin error
   await jugador.enviar({ tipo: 'accion', texto: 'Grito' });
   await gestor.esperarIa(codigo);
   assert.equal(llamadas.length, 0);
@@ -111,4 +112,41 @@ test('sin API key no se puede crear sala con GM IA, pero sí con GM humano', asy
   await gestor.conectar({ enviar: (m) => recibidos.push(m as Msj) })
     .recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID, gm_perfil_id: 'tabernera' }));
   assert.match(recibidos.at(-1)!.mensaje, /ANTHROPIC_API_KEY/);
+});
+
+test('tras reiniciar el servidor, la sala se retoma con nodo, variables, PG, historial e IA', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reinicio-'));
+  const repo = new RepositorioMemoria(DATOS_DEMO);
+  const perfiles = new Perfiles(join(dir, 'perfiles.json'));
+  const gmIa = () => new GmIa({ cliente: { crear: async () => respuesta([usar('fijar_variable', { nombre: 'antorchas_encendidas', valor: true })], 'end_turn') }, presupuesto: new Presupuesto(join(dir, 'g.json'), 5) });
+  const conectar = (g: Gestor) => {
+    const recibidos: Msj[] = [];
+    const c = g.conectar({ enviar: (m) => recibidos.push(m as Msj) });
+    return { recibidos, enviar: (m: Msj) => c.recibir(JSON.stringify(m)) };
+  };
+
+  const antes = new Gestor(repo, () => {}, { gm: gmIa(), perfiles });
+  const gm = conectar(antes);
+  await gm.enviar({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID, gm_perfil_id: 'cronista' });
+  const codigo = gm.recibidos.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  const brisa = conectar(antes);
+  await brisa.enviar({ tipo: 'unirse', codigo, personaje_id: BRISA });
+  await gm.enviar({ tipo: 'aplicar_pg', personaje_id: BRISA, cantidad: -4 });
+  await gm.enviar({ tipo: 'cambiar_nodo', nodo_id: '2' });
+  await gm.enviar({ tipo: 'narrar_escena' });
+  await antes.esperarIa(codigo);
+  await gm.enviar({ tipo: 'pausar_ia', pausada: true });
+
+  // "Reinicio": un gestor nuevo sobre la misma base.
+  const despues = new Gestor(repo, () => {}, { gm: gmIa(), perfiles });
+  const vuelta = conectar(despues);
+  await vuelta.enviar({ tipo: 'unirse', codigo, personaje_id: BRISA });
+  const bienvenida = vuelta.recibidos.find((m) => m.tipo === 'bienvenida')!;
+  assert.equal(bienvenida.estado.jugadores[0].pg_actual, 5);
+  assert.ok(bienvenida.historial.some((e: Msj) => e.datos.cambio === 'nodo'));
+  const guardada = (await repo.buscarSesionPorCodigo(codigo))!;
+  assert.equal(guardada.nodo_actual, '2');
+  assert.deepEqual(guardada.variables, { antorchas_encendidas: true });
+  assert.equal(guardada.ia_pausada, true);
+  assert.equal(guardada.ia_perfil_id, 'cronista');
 });

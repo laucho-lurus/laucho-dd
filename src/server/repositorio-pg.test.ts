@@ -16,9 +16,10 @@ function columnas(tabla: string) {
   };
 }
 
-function repoFalso() {
+function repoFalso(columnasMigracion = 3) {
   const consultas: { sql: string; params: unknown[] }[] = [];
   const query = async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('information_schema.columns')) return { rows: [{ n: String(columnasMigracion) }] };
     consultas.push({ sql, params });
     return { rows: [{ id: '22222222-2222-4222-8222-222222222222' }] };
   };
@@ -77,4 +78,30 @@ test('si falla el INSERT hace rollback', async () => {
   });
   await assert.rejects(repo.crearPersonaje(personaje, null));
   assert.equal(consultas.at(-1)!.sql, 'rollback');
+});
+
+/** Columnas de sesiones tras aplicar db/migraciones/001_sesiones_variables.sql. */
+const columnasSesiones = () => {
+  const migracion = readFileSync(new URL('../../db/migraciones/001_sesiones_variables.sql', import.meta.url), 'utf8');
+  return [...columnas('sesiones').todas, ...[...migracion.matchAll(/add column if not exists (\w+)/g)].map((m) => m[1])];
+};
+
+const estado = { nodo_actual: '2', variables: { llave_palomar: true }, ia_pausada: true, ia_perfil_id: null };
+
+test('guardarEstadoSesion con la migración 001 guarda todo, y las columnas existen', async () => {
+  const { repo, consultas } = repoFalso(3);
+  await repo.guardarEstadoSesion('s1', estado);
+  const cols = [...consultas[0].sql.matchAll(/(\w+) = \$/g)].map((m) => m[1]);
+  assert.deepEqual(cols, ['nodo_actual', 'variables', 'ia_pausada', 'ia_perfil_id', 'id']);
+  for (const c of cols) assert.ok(columnasSesiones().includes(c), c);
+  assert.deepEqual(await repo.avisosBase(), []);
+});
+
+test('sin la migración 001 solo guarda el nodo y avisa', async () => {
+  const { repo, consultas } = repoFalso(0);
+  await repo.guardarEstadoSesion('s1', estado);
+  assert.match(consultas[0].sql, /set nodo_actual = \$2 where id = \$1$/);
+  assert.match((await repo.avisosBase())[0], /migración 001/);
+  await repo.buscarSesionPorCodigo('ABCDEF');
+  assert.doesNotMatch(consultas.at(-1)!.sql, /variables/);
 });

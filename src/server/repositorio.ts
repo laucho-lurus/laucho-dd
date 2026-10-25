@@ -3,6 +3,8 @@
 
 import type { Diagrama, Variables } from '../rules/aventura.ts';
 
+export const MIGRACION_001 = 'Falta aplicar la migración 001 (db/migraciones/001_sesiones_variables.sql)';
+
 export interface Campana {
   id: string;
   nombre: string;
@@ -58,6 +60,18 @@ export interface Sesion {
   codigo: string;
   campana_id: string;
   estado: string;
+  nodo_actual?: string | null;
+  variables?: Variables | null; // null: la base aún no tiene la columna (migración 001)
+  ia_pausada?: boolean;
+  ia_perfil_id?: string | null;
+}
+
+/** Estado de la partida que se guarda para poder retomarla. */
+export interface EstadoSesion {
+  nodo_actual: string | null;
+  variables: Variables;
+  ia_pausada: boolean;
+  ia_perfil_id: string | null;
 }
 
 /** Tipos permitidos por la columna eventos.tipo (ver db/schema.sql). */
@@ -85,6 +99,10 @@ export interface Repositorio {
   /** Crea la sesión. Devuelve null si el código ya existe. */
   crearSesion(campanaId: string, codigo: string): Promise<Sesion | null>;
   buscarSesionPorCodigo(codigo: string): Promise<Sesion | null>;
+  /** Guarda nodo, variables y estado de la IA. Sin la migración 001 solo guarda el nodo. */
+  guardarEstadoSesion(sesionId: string, estado: EstadoSesion): Promise<void>;
+  /** Avisos para el GM sobre la base de datos (p. ej. migraciones pendientes). */
+  avisosBase(): Promise<string[]>;
   registrarEvento(evento: NuevoEvento): Promise<Evento>;
   /** Últimos eventos de la sesión, del más viejo al más nuevo. */
   ultimosEventos(sesionId: string, limite: number): Promise<Evento[]>;

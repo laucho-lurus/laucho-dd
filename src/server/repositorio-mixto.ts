@@ -1,4 +1,4 @@
-import type { NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
+import type { EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
 
 /**
  * Une dos repositorios: las campañas del `local` (la demo en memoria) se quedan ahí,
@@ -55,6 +55,14 @@ export class RepositorioMixto implements Repositorio {
 
   async buscarSesionPorCodigo(codigo: string) {
     return (await this.local.buscarSesionPorCodigo(codigo)) ?? this.principal.buscarSesionPorCodigo(codigo);
+  }
+
+  async guardarEstadoSesion(sesionId: string, estado: EstadoSesion) {
+    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarEstadoSesion(sesionId, estado);
+  }
+
+  async avisosBase() {
+    return this.principal.avisosBase();
   }
 
   async registrarEvento(evento: NuevoEvento) {

@@ -47,6 +47,7 @@ export class Gestor {
           registro,
           publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
           pedirTirada: (sala, autor, id, tirada, motivo, cd) => this.pedirTirada(sala, autor, id, tirada, motivo, cd),
+          guardarEstado: (sala) => this.guardarEstado(sala),
         })
       : null;
   }
@@ -141,7 +142,10 @@ export class Gestor {
       const token = randomBytes(16).toString('hex');
       const sala = new Sala(sesion, campana, personajes, token);
       sala.sentarGm(cliente, token);
-      if (perfilId) await this.ia!.activar(sala, perfilId);
+      if (perfilId) {
+        await this.ia!.activar(sala, perfilId);
+        await this.guardarEstado(sala);
+      }
       this.salas.set(sesion.codigo, sala);
       cliente.enviar({ tipo: 'sesion_creada', codigo: sesion.codigo, token_gm: token, estado: sala.estado() });
       await this.ia?.enviarPanel(sala);
@@ -172,6 +176,11 @@ export class Gestor {
     const personajes = await this.repo.personajesDeCampana(campana.id);
     // El token del GM vive solo en memoria: tras un reinicio el GM no puede retomar (ver README).
     const sala = new Sala(sesion, campana, personajes, null);
+    if (sesion.ia_perfil_id && this.ia?.disponible()) {
+      const error = await this.ia.activar(sala, sesion.ia_perfil_id);
+      if (error) this.registro(`[sala] no se pudo retomar el GM IA de ${codigo}: ${error}`);
+      else this.ia.pausar(sala, sesion.ia_pausada ?? false);
+    }
     this.salas.set(codigo, sala);
     return sala;
   }
@@ -236,8 +245,9 @@ export class Gestor {
         return this.ia!.disparar(sala, 'El GM humano pide que narres la escena actual.');
       case 'pausar_ia': {
         soloGm(quien);
-        const error = this.ia?.pausar(sala, m.pausada) ?? 'Esta sala no tiene GM IA';
+        const error = this.ia ? this.ia.pausar(sala, m.pausada) : 'Esta sala no tiene GM IA';
         if (error) throw new ErrorDeJuego(error);
+        await this.guardarEstado(sala);
         return this.publicar(sala, 'estado', autor, { cambio: 'ia_pausa', pausada: m.pausada, texto: m.pausada ? 'El GM pausó la IA.' : 'El GM reanudó la IA.' });
       }
       case 'deshacer_ia': {
@@ -250,6 +260,7 @@ export class Gestor {
         soloGm(quien);
         const r = sala.cambiarNodo(m.nodo_id);
         if (!r.ok) throw new ErrorDeJuego(r.error);
+        await this.guardarEstado(sala);
         return this.publicar(sala, 'estado', autor, { cambio: 'nodo', nodo_id: m.nodo_id });
       }
       case 'aplicar_pg': {
@@ -301,6 +312,14 @@ export class Gestor {
     const r = sala.pedirTirada(personajeId, { notacion, motivo, cd });
     if (!r.ok) throw new ErrorDeJuego(r.error);
     await this.publicar(sala, 'estado', autor, { cambio: 'pedir_tirada', personaje_id: personajeId, personaje_nombre: destino.nombre, notacion, motivo });
+  }
+
+  private async guardarEstado(sala: Sala) {
+    try {
+      await this.repo.guardarEstadoSesion(sala.sesion.id, sala.estadoGuardable());
+    } catch (err) {
+      this.registro('[sala] no se pudo guardar el estado de la sesión:', err); // la memoria manda
+    }
   }
 
   private async guardarPg(personajeId: string, pg: number) {

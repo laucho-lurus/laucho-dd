@@ -16,6 +16,7 @@ export interface Puertos {
   publicar(sala: Sala, tipo: TipoEvento, autor: string, datos: Record<string, unknown>): Promise<Evento | { id: null }>;
   pedirTirada(sala: Sala, autor: string, personajeId: string, tirada: { chequeo?: string; notacion?: string }, motivo: string | null, cd: number | null): Promise<void>;
   registro(mensaje: string, err?: unknown): void;
+  guardarEstado(sala: Sala): Promise<void>;
 }
 
 const AVISOS: Record<EstadoGasto['nivel'], (e: EstadoGasto) => string> = {
@@ -115,12 +116,15 @@ export class MesaIa {
           avanzarNodo: (nodoId) => sala.encolar(async () => {
             const r = sala.cambiarNodo(nodoId);
             if (!r.ok) return r.error;
+            await this.puertos.guardarEstado(sala);
             anotar(await this.puertos.publicar(sala, 'estado', AUTOR_IA, { cambio: 'nodo', nodo_id: nodoId, titulo: buscarNodo(sala.diagrama, nodoId)?.titulo, personaje_nombre: firma, ia: true }));
             return `Ahora en el nodo ${nodoId}`;
           }),
           fijarVariable: (nombre, valor) => sala.encolar(async () => {
             const r = sala.fijarVariable(nombre, valor);
-            return r.ok ? `${nombre} = ${JSON.stringify(valor)}` : r.error;
+            if (!r.ok) return r.error;
+            await this.puertos.guardarEstado(sala);
+            return `${nombre} = ${JSON.stringify(valor)}`;
           }),
         },
         (nivel, estado) => {
@@ -153,6 +157,7 @@ export class MesaIa {
         : null,
       ia_disponible: this.disponible(),
       gasto,
+      avisos: await this.puertos.repo.avisosBase().catch(() => []),
     });
   }
 }

@@ -114,6 +114,8 @@ function pintarPanel(p) {
     $('narrar-escena').disabled = ia.pausada || ia.pensando;
     $('deshacer-ia').disabled = !ia.puede_deshacer;
   }
+  $('avisos-base').hidden = !p.avisos?.length;
+  $('avisos-base').textContent = (p.avisos ?? []).join(' · ');
   $('nodo').replaceChildren(...p.nodos.map((n) => new Option(`${n.id}. ${n.titulo}`, n.id)));
   if (p.nodo) $('nodo').value = p.nodo.id;
   $('notas-nodo').textContent = p.nodo ? `Notas: ${p.nodo.notas || '—'} · Salidas: ${p.salidas.map((s) => `${s.hasta} (${s.etiqueta})`).join(', ') || 'ninguna'}` : '';

@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Campana, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import { MIGRACION_001, type Campana, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
@@ -18,6 +18,7 @@ const aEvento = (f: FilaEvento): Evento => ({ ...f, id: Number(f.id), creado_en:
 /** Repositorio sobre Postgres/Neon con las tablas de db/schema.sql. */
 export class RepositorioPg implements Repositorio {
   private readonly pool: pg.Pool;
+  private migracion001: Promise<boolean> | null = null;
 
   constructor(connectionString: string) {
     this.pool = new pg.Pool({ connectionString, max: 5 });
@@ -92,12 +93,44 @@ export class RepositorioPg implements Repositorio {
     }
   }
 
+  /** ¿Tiene sesiones las columnas de la migración 001? Se consulta una vez. */
+  private tieneMigracion001(): Promise<boolean> {
+    this.migracion001 ??= this.pool
+      .query<{ n: string }>(
+        `select count(*) as n from information_schema.columns
+          where table_name = 'sesiones' and column_name in ('variables', 'ia_pausada', 'ia_perfil_id')`,
+      )
+      .then((r) => Number(r.rows[0].n) === 3)
+      .catch((err) => {
+        this.migracion001 = null; // reintenta la próxima vez
+        throw err;
+      });
+    return this.migracion001;
+  }
+
   async buscarSesionPorCodigo(codigo: string) {
+    const extra = (await this.tieneMigracion001()) ? ', variables, ia_pausada, ia_perfil_id' : '';
     const r = await this.pool.query<Sesion>(
-      'select id, codigo, campana_id, estado from sesiones where codigo = $1',
+      `select id, codigo, campana_id, estado, nodo_actual${extra} from sesiones where codigo = $1`,
       [codigo],
     );
-    return r.rows[0] ?? null;
+    const s = r.rows[0];
+    return s ? { ...s, variables: extra ? s.variables : null } : null;
+  }
+
+  async guardarEstadoSesion(sesionId: string, e: EstadoSesion) {
+    if (await this.tieneMigracion001()) {
+      await this.pool.query(
+        'update sesiones set nodo_actual = $2, variables = $3, ia_pausada = $4, ia_perfil_id = $5 where id = $1',
+        [sesionId, e.nodo_actual, JSON.stringify(e.variables), e.ia_pausada, e.ia_perfil_id],
+      );
+    } else {
+      await this.pool.query('update sesiones set nodo_actual = $2 where id = $1', [sesionId, e.nodo_actual]);
+    }
+  }
+
+  async avisosBase() {
+    return (await this.tieneMigracion001()) ? [] : [MIGRACION_001];
   }
 
   async registrarEvento(e: NuevoEvento) {
