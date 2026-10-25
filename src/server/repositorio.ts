@@ -74,8 +74,8 @@ export interface EstadoSesion {
   ia_perfil_id: string | null;
 }
 
-/** Tipos permitidos por la columna eventos.tipo (ver db/schema.sql). */
-export type TipoEvento = 'mensaje' | 'accion' | 'tirada' | 'estado' | 'intervencion_gm';
+/** Valores de eventos.tipo (columna de texto libre en db/schema.sql). */
+export type TipoEvento = 'mensaje' | 'accion' | 'tirada' | 'estado' | 'intervencion_gm' | 'sistema' | 'chat';
 
 export interface NuevoEvento {
   sesion_id: string;

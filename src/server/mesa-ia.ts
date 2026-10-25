@@ -8,7 +8,7 @@ import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
 import { SIN_INTERVENCION, type IntervencionIa, type Sala } from './sala.ts';
 
 const AUTOR_IA = 'gm_ia';
-const EVENTOS_CONTEXTO = 20;
+const EVENTOS_CONTEXTO = 40; // la IA usa los últimos 20 de juego y 8 de chat
 export const TIEMPO_MAXIMO_MS = 45_000; // pasado esto se libera la sala aunque la API no conteste
 
 /** Lo que la mesa necesita del gestor. */
@@ -54,6 +54,17 @@ export class MesaIa {
     if (!perfil) return 'No existe ese perfil de GM';
     sala.ia = { perfil, pausada: false, puede_pg: true, ultima: SIN_INTERVENCION };
     return null;
+  }
+
+  /** Texto fijo de bienvenida (sin llamar a la API). */
+  static bienvenida(perfil: { nombre: string; descripcion: string }) {
+    return `Esta mesa la dirige ${perfil.nombre} (GM IA): ${perfil.descripcion}
+Cómo se juega:
+1) En tu turno escribe qué hace tu personaje, en texto libre.
+2) Cuando el GM pida una tirada te aparecerá un botón para tirar; no puedes tirar por tu cuenta.
+3) Fuera de turno puedes hablar con el grupo en el chat de mesa.
+4) El GM humano puede intervenir o pausar la IA en cualquier momento.
+El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
   }
 
   /** Lanza una intervención de la IA sin bloquear la sala. */

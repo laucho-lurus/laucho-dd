@@ -226,3 +226,61 @@ test('si la API se cuelga, a los 45 s (aquí 20 ms) se libera la sala y el GM lo
   assert.match(humano.recibidos.filter((m) => m.tipo === 'error').at(-1)!.mensaje, /no respondió/);
   assert.equal(humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!.ia.pensando, false);
 });
+
+test('bienvenida fija del GM IA: una vez, sin API, y queda en el historial', async () => {
+  const { jugador, llamadas } = await mesa([]);
+  const bienvenida = jugador.recibidos.find((m) => m.tipo === 'bienvenida')!;
+  const caja = bienvenida.historial.filter((e: Msj) => e.tipo === 'sistema');
+  assert.equal(caja.length, 1);
+  assert.match(caja[0].datos.texto, /^Esta mesa la dirige La Tabernera \(GM IA\): Cálida y con humor/);
+  assert.match(caja[0].datos.texto, /no puedes tirar por tu cuenta/);
+  assert.equal(llamadas.length, 0);
+});
+
+test('chat de mesa: llega a todos, no gasta turno, no despierta a la IA y respeta límites', async () => {
+  const { gestor, humano, jugador, codigo, llamadas } = await mesa([]);
+  await jugador.enviar({ tipo: 'chat', texto: '¿Vamos por la izquierda?', en_personaje: false });
+  const ev = eventos(humano).at(-1);
+  assert.equal(ev.tipo, 'chat');
+  assert.deepEqual([ev.datos.personaje_nombre, ev.datos.en_personaje], ['Brisa', false]);
+  await gestor.esperarIa(codigo);
+  assert.equal(llamadas.length, 0);
+
+  await jugador.enviar({ tipo: 'chat', texto: 'otra', en_personaje: true });
+  assert.match(jugador.ultimo().mensaje, /Espera un segundo/);
+  await humano.enviar({ tipo: 'chat', texto: 'El GM también charla', en_personaje: false }); // cada uno su ritmo
+  assert.equal(eventos(jugador).at(-1).autor, 'gm');
+  await humano.enviar({ tipo: 'chat', texto: 'x'.repeat(301) });
+  assert.match(humano.ultimo().mensaje, /300 caracteres/);
+});
+
+test('el chat se restaura al reunirse tras reiniciar y la IA lo ve etiquetado', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chat-'));
+  const repo = new RepositorioMemoria(DATOS_DEMO);
+  const llamadas: Anthropic.MessageCreateParamsNonStreaming[] = [];
+  const opciones = () => ({
+    gm: new GmIa({
+      cliente: { crear: async (p) => (llamadas.push(p), respuesta([usar('narrar', { texto: 'Sigue.' })], 'end_turn')) },
+      presupuesto: new Presupuesto(join(dir, 'g.json'), 5),
+    }),
+    perfiles: new Perfiles(join(dir, 'p.json')),
+  });
+  const antes = new Gestor(repo, () => {}, opciones());
+  const recibidos: Msj[] = [];
+  const gm = antes.conectar({ enviar: (m) => recibidos.push(m as Msj) });
+  await gm.recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID, gm_perfil_id: 'cronista' }));
+  const codigo = recibidos.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  await gm.recibir(JSON.stringify({ tipo: 'chat', texto: 'Pausa para el café', en_personaje: false }));
+
+  const despues = new Gestor(repo, () => {}, opciones());
+  const j: Msj[] = [];
+  const brisa = despues.conectar({ enviar: (m) => j.push(m as Msj) });
+  await brisa.recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
+  assert.ok(j.find((m) => m.tipo === 'bienvenida')!.historial.some((e: Msj) => e.tipo === 'chat' && e.datos.texto === 'Pausa para el café'));
+
+  await brisa.recibir(JSON.stringify({ tipo: 'accion', texto: 'Miro alrededor' }));
+  await despues.esperarIa(codigo);
+  const prompt = llamadas[0].messages[0].content as string;
+  assert.match(prompt, /\[chat de mesa\] GM: Pausa para el café/);
+  assert.doesNotMatch(prompt.split('Chat de mesa reciente')[0], /Pausa para el café/);
+});

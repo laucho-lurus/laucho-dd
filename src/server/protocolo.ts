@@ -2,6 +2,7 @@
 
 export const MAX_TEXTO = 2000;
 export const MAX_NOTACION = 40;
+export const MAX_CHAT = 300;
 const MAX_ID = 64;
 
 export type MensajeCliente =
@@ -19,6 +20,7 @@ export type MensajeCliente =
   | { tipo: 'narrar_escena' }
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
+  | { tipo: 'chat'; texto: string; en_personaje: boolean }
   | { tipo: 'ia_permitir_pg'; permitido: boolean }
   | { tipo: 'cambiar_nodo'; nodo_id: string }
   | { tipo: 'siguiente_turno' }
@@ -139,6 +141,11 @@ export function validarMensaje(crudo: string): Validacion {
     case 'pausar_ia':
       if (typeof m.pausada !== 'boolean') return falla('"pausada" debe ser true o false');
       return bien({ tipo: 'pausar_ia', pausada: m.pausada });
+    case 'chat': {
+      const t = texto(m, 'texto', MAX_CHAT);
+      if (esError(t)) return falla(t.error);
+      return bien({ tipo: 'chat', texto: t, en_personaje: m.en_personaje === true });
+    }
     case 'ia_permitir_pg':
       if (typeof m.permitido !== 'boolean') return falla('"permitido" debe ser true o false');
       return bien({ tipo: 'ia_permitir_pg', permitido: m.permitido });

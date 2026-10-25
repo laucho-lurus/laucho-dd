@@ -149,7 +149,10 @@ ${fichas.join('\n') || '- nadie'}
 Habilidades válidas para pedir_tirada: ${Object.keys(HABILIDADES).join(', ')}, salvacion_fue/des/con/int/sab/car.
 
 Últimos eventos:
-${c.eventos.slice(-20).map(texto).join('\n') || '- (ninguno)'}
+${c.eventos.filter((e) => e.tipo !== 'chat' && e.tipo !== 'sistema').slice(-20).map(texto).join('\n') || '- (ninguno)'}
+
+Chat de mesa reciente (no necesita respuesta):
+${c.eventos.filter((e) => e.tipo === 'chat').slice(-8).map((e) => `[chat de mesa] ${texto(e)}`).join('\n') || '- (vacío)'}
 
 QUÉ PASÓ AHORA: ${disparador}`;
 }

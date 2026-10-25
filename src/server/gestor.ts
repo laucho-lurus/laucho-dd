@@ -11,6 +11,7 @@ import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 
 const INTENTOS_CODIGO = 10;
 const LARGO_HISTORIAL = 50;
+const CHAT_INTERVALO_MS = 1000; // 1 mensaje por segundo por persona
 
 export interface Conexion {
   /** Procesa un mensaje crudo del cliente. La promesa se resuelve cuando ya respondió. */
@@ -38,6 +39,7 @@ export class Gestor {
   private readonly registro: Registro;
 
   private readonly ia: MesaIa | null;
+  private readonly ultimoChat = new WeakMap<Cliente, number>();
 
   constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? ''), ia?: OpcionesIa) {
     this.repo = repo;
@@ -150,6 +152,8 @@ export class Gestor {
       }
       this.salas.set(sesion.codigo, sala);
       cliente.enviar({ tipo: 'sesion_creada', codigo: sesion.codigo, token_gm: token, estado: sala.estado() });
+      // Bienvenida una sola vez por sesión: queda en el historial para quien entre después.
+      if (sala.ia) await this.publicar(sala, 'sistema', 'sistema', { cambio: 'bienvenida_ia', texto: MesaIa.bienvenida(sala.ia.perfil) });
       await this.ia?.enviarPanel(sala);
       return sala;
     }
@@ -222,6 +226,14 @@ export class Gestor {
         if (sala.turnoDe() !== quien.personaje_id) throw new ErrorDeJuego('No es tu turno');
         await this.publicar(sala, 'accion', autor, { texto: m.texto, personaje_nombre: nombre });
         return this.ia?.disparar(sala, `${nombre} (jugador) hace: ${m.texto}`);
+      case 'chat': {
+        // Charla entre jugadores: no gasta turno y no despierta a la IA.
+        const ahora = Date.now();
+        if (ahora - (this.ultimoChat.get(cliente) ?? -Infinity) < CHAT_INTERVALO_MS) throw new ErrorDeJuego('Espera un segundo entre mensajes de chat');
+        this.ultimoChat.set(cliente, ahora);
+        await this.publicar(sala, 'chat', autor, { texto: m.texto, en_personaje: m.en_personaje, personaje_nombre: nombre });
+        return;
+      }
       case 'narracion':
         soloGm(quien);
         return this.publicar(sala, 'mensaje', autor, { texto: m.texto, personaje_nombre: nombre });
