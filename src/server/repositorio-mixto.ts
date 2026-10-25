@@ -1,3 +1,4 @@
+import type { Monstruo } from '../rules/monstruos.ts';
 import type { EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
 
 /**
@@ -59,6 +60,18 @@ export class RepositorioMixto implements Repositorio {
 
   async guardarEstadoSesion(sesionId: string, estado: EstadoSesion) {
     return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarEstadoSesion(sesionId, estado);
+  }
+
+  async criaturasDeCampana(campanaId: string) {
+    return (await this.para(campanaId)).criaturasDeCampana(campanaId);
+  }
+
+  async monstruosDeSesion(sesionId: string) {
+    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).monstruosDeSesion(sesionId);
+  }
+
+  async guardarMonstruos(sesionId: string, monstruos: Monstruo[]) {
+    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarMonstruos(sesionId, monstruos);
   }
 
   async avisosBase() {

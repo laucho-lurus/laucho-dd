@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { plantillaDeCriatura, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 import { MIGRACION_001, type Campana, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,6 +132,32 @@ export class RepositorioPg implements Repositorio {
       );
     } else {
       await this.pool.query('update sesiones set nodo_actual = $2 where id = $1', [sesionId, e.nodo_actual]);
+    }
+  }
+
+  async criaturasDeCampana(campanaId: string): Promise<Plantilla[]> {
+    if (!UUID.test(campanaId)) return [];
+    const r = await this.pool.query<{ nombre: string; srd_clave: string | null; stats: Record<string, unknown> }>(
+      'select nombre, srd_clave, stats from criaturas where campana_id = $1 or campana_id is null order by nombre',
+      [campanaId],
+    );
+    return r.rows.map(plantillaDeCriatura).filter((p): p is Plantilla => p !== null);
+  }
+
+  async monstruosDeSesion(sesionId: string) {
+    const r = await this.pool.query<{ participantes: unknown }>(
+      'select participantes from encuentros where sesion_id = $1 and activo limit 1',
+      [sesionId],
+    );
+    const p = r.rows[0]?.participantes as { monstruos?: Monstruo[] } | undefined;
+    return Array.isArray(p?.monstruos) ? p.monstruos : [];
+  }
+
+  async guardarMonstruos(sesionId: string, monstruos: Monstruo[]) {
+    const participantes = JSON.stringify({ monstruos });
+    const r = await this.pool.query('update encuentros set participantes = $2 where sesion_id = $1 and activo', [sesionId, participantes]);
+    if (r.rowCount === 0) {
+      await this.pool.query('insert into encuentros (sesion_id, participantes) values ($1, $2)', [sesionId, participantes]);
     }
   }
 

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Monstruo } from '../rules/monstruos.ts';
 import type { Campana, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 export interface DatosIniciales {
@@ -12,6 +13,7 @@ export class RepositorioMemoria implements Repositorio {
   private personajes: readonly Personaje[];
   private readonly sesiones = new Map<string, Sesion>(); // por código
   private readonly eventos: Evento[] = [];
+  private readonly encuentros = new Map<string, Monstruo[]>(); // sesion_id → monstruos
 
   constructor(datos: DatosIniciales = {}) {
     this.campanas = new Map((datos.campanas ?? []).map((c) => [c.id, c]));
@@ -53,6 +55,18 @@ export class RepositorioMemoria implements Repositorio {
 
   async guardarEstadoSesion(sesionId: string, estado: EstadoSesion) {
     for (const [codigo, s] of this.sesiones) if (s.id === sesionId) this.sesiones.set(codigo, { ...s, ...estado });
+  }
+
+  async criaturasDeCampana() {
+    return []; // la demo usa el SRD local
+  }
+
+  async monstruosDeSesion(sesionId: string) {
+    return this.encuentros.get(sesionId) ?? [];
+  }
+
+  async guardarMonstruos(sesionId: string, monstruos: Monstruo[]) {
+    this.encuentros.set(sesionId, monstruos.map((m) => ({ ...m })));
   }
 
   async avisosBase() {

@@ -2,6 +2,7 @@
 // memoria (tests y desarrollo) y Postgres/Neon (producción).
 
 import type { Diagrama, Variables } from '../rules/aventura.ts';
+import type { Monstruo, Plantilla } from '../rules/monstruos.ts';
 
 export const MIGRACION_001 = 'Falta aplicar la migración 001 (db/migraciones/001_sesiones_variables.sql)';
 
@@ -101,6 +102,11 @@ export interface Repositorio {
   buscarSesionPorCodigo(codigo: string): Promise<Sesion | null>;
   /** Guarda nodo, variables y estado de la IA. Sin la migración 001 solo guarda el nodo. */
   guardarEstadoSesion(sesionId: string, estado: EstadoSesion): Promise<void>;
+  /** Criaturas disponibles para la campaña (tabla criaturas: de la campaña o globales). */
+  criaturasDeCampana(campanaId: string): Promise<Plantilla[]>;
+  /** Monstruos del encuentro activo de la sesión (encuentros.participantes). */
+  monstruosDeSesion(sesionId: string): Promise<Monstruo[]>;
+  guardarMonstruos(sesionId: string, monstruos: Monstruo[]): Promise<void>;
   /** Avisos para el GM sobre la base de datos (p. ej. migraciones pendientes). */
   avisosBase(): Promise<string[]>;
   registrarEvento(evento: NuevoEvento): Promise<Evento>;
