@@ -1,5 +1,6 @@
 import { Gestor } from './gestor.ts';
 import { crearServidor } from './http.ts';
+import { crearApi } from './api.ts';
 import { RepositorioMemoria } from './repositorio-memoria.ts';
 import { RepositorioPg } from './repositorio-pg.ts';
 import { CAMPANA_DEMO_ID, DATOS_DEMO } from './demo.ts';
@@ -32,8 +33,8 @@ async function repositorio(): Promise<Repositorio> {
 }
 
 try {
-  const gestor = new Gestor(await repositorio());
-  crearServidor(gestor).listen(PUERTO, () => console.log(`Servidor de salas en http://localhost:${PUERTO}`));
+  const repo = await repositorio();
+  crearServidor(new Gestor(repo), crearApi(repo)).listen(PUERTO, () => console.log(`Servidor de salas en http://localhost:${PUERTO}`));
 } catch (err) {
   console.error('No se pudo arrancar:', (err as Error).message);
   process.exit(1);

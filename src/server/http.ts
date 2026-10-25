@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Gestor } from './gestor.ts';
+import type { crearApi } from './api.ts';
 
 const PUBLICO = new URL('../../public/', import.meta.url);
 const TIPOS: Record<string, string> = {
@@ -9,7 +10,7 @@ const TIPOS: Record<string, string> = {
   css: 'text/css; charset=utf-8',
   js: 'text/javascript; charset=utf-8',
 };
-const ALIAS: Record<string, string> = { '/': 'index.html', '/prueba': 'prueba.html' };
+const ALIAS: Record<string, string> = { '/': 'index.html', '/prueba': 'prueba.html', '/personaje': 'personaje.html' };
 /** Solo nombres simples dentro de public/ (y public/js/): nada de "..". */
 const RUTA_SEGURA = /^\/(?:js\/)?[a-z0-9-]+\.(html|css|js)$/;
 
@@ -22,7 +23,7 @@ const MAX_MENSAJE_BYTES = 16 * 1024;
 const LATIDO_MS = 30_000;
 
 /** Servidor HTTP que sirve public/index.html y acepta WebSockets en /ws. */
-export function crearServidor(gestor: Gestor): Server {
+export function crearServidor(gestor: Gestor, api: ReturnType<typeof crearApi>): Server {
   const http = createServer(async (req, res) => {
     const ruta = (req.url ?? '/').split('?')[0];
     const publico = req.method === 'GET' ? archivoPublico(ruta) : null;
@@ -36,6 +37,7 @@ export function crearServidor(gestor: Gestor): Server {
       }
       return;
     }
+    if (await api(req, res, ruta)) return;
     if (req.method === 'GET' && ruta === '/salud') {
       res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
       return;

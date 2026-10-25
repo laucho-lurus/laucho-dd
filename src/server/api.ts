@@ -1,0 +1,92 @@
+// API HTTP de creación de personajes y archivos subidos.
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { ALINEAMIENTOS, CLASES, METODOS, RAZAS } from '../rules/personaje.ts';
+import { crearPersonaje, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
+import type { Repositorio } from './repositorio.ts';
+
+const UPLOADS = new URL('../../uploads/', import.meta.url);
+const MAX_CUERPO_BYTES = Math.ceil(MAX_IMAGEN_BYTES * 1.4) + 64 * 1024; // base64 + resto del formulario
+const ARCHIVO_SUBIDO = /^\/uploads\/([0-9a-f-]{36}\.(png|jpg|webp))$/;
+const TIPOS_IMAGEN: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
+
+class CuerpoDemasiadoGrande extends Error {}
+
+function json(res: ServerResponse, estado: number, datos: unknown) {
+  res.writeHead(estado, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify(datos));
+}
+
+async function leerJson(req: IncomingMessage): Promise<unknown> {
+  const partes: Buffer[] = [];
+  let total = 0;
+  for await (const parte of req) {
+    total += (parte as Buffer).length;
+    if (total > MAX_CUERPO_BYTES) throw new CuerpoDemasiadoGrande();
+    partes.push(parte as Buffer);
+  }
+  return JSON.parse(Buffer.concat(partes).toString('utf8'));
+}
+
+const opciones = (tabla: Readonly<Record<string, { nombre: string }>>) =>
+  Object.entries(tabla).map(([clave, v]) => ({ clave, ...v }));
+
+export function crearApi(repo: Repositorio) {
+  const deps: Dependencias = {
+    repo,
+    tiradas: new TiradasCaracteristicas(),
+    guardarArchivo: async (nombre, contenido) => {
+      await mkdir(UPLOADS, { recursive: true });
+      await writeFile(new URL(nombre, UPLOADS), contenido, { flag: 'wx' });
+    },
+  };
+
+  /** Atiende la petición si es de la API o de /uploads. Devuelve false si no le toca. */
+  return async function atender(req: IncomingMessage, res: ServerResponse, ruta: string): Promise<boolean> {
+    try {
+      if (req.method === 'GET' && ruta === '/api/opciones') {
+        json(res, 200, {
+          razas: opciones(RAZAS),
+          clases: opciones(CLASES),
+          alineamientos: ALINEAMIENTOS,
+          metodos: METODOS,
+          campanas: await repo.listarCampanas(),
+        });
+        return true;
+      }
+      if (req.method === 'POST' && ruta === '/api/caracteristicas/tirar') {
+        json(res, 200, deps.tiradas.tirar());
+        return true;
+      }
+      if (req.method === 'POST' && ruta === '/api/personajes') {
+        let cuerpo;
+        try {
+          cuerpo = await leerJson(req);
+        } catch (err) {
+          json(res, err instanceof CuerpoDemasiadoGrande ? 413 : 400, {
+            error: err instanceof CuerpoDemasiadoGrande ? 'La imagen supera 2 MB' : 'Petición inválida',
+          });
+          return true;
+        }
+        const r = await crearPersonaje(deps, cuerpo);
+        if (r.ok) json(res, 201, { personaje: r.valor });
+        else json(res, 400, { error: r.error });
+        return true;
+      }
+      const subido = req.method === 'GET' ? ARCHIVO_SUBIDO.exec(ruta) : null;
+      if (subido) {
+        try {
+          const contenido = await readFile(new URL(subido[1], UPLOADS));
+          res.writeHead(200, { 'content-type': TIPOS_IMAGEN[subido[2]], 'x-content-type-options': 'nosniff' }).end(contenido);
+        } catch {
+          res.writeHead(404).end();
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(`[api] error en ${req.method} ${ruta}:`, err);
+      json(res, 500, { error: 'Error interno del servidor' });
+      return true;
+    }
+  };
+}
