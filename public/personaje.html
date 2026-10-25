@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crear personaje</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/mesa.css">
+<link rel="stylesheet" href="/personaje.css">
+</head>
+<body>
+<main class="creacion">
+  <h1>Crear personaje</h1>
+
+  <section class="tarjeta">
+    <h2>Quién es</h2>
+    <div class="rejilla">
+      <label>Campaña <select id="campana"></select></label>
+      <label>Nombre <input id="nombre" maxlength="60" autocomplete="off"></label>
+      <label>Raza <select id="raza"></select></label>
+      <label>Clase <select id="clase"></select></label>
+      <label>Trasfondo <input id="trasfondo" maxlength="80" placeholder="Soldado, Acólito, Criminal…"></label>
+      <label>Alineamiento <select id="alineamiento"></select></label>
+    </div>
+    <label>Descripción <textarea id="descripcion" rows="4" maxlength="4000" placeholder="Aspecto, personalidad, historia…"></textarea></label>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Características</h2>
+    <div class="fila">
+      <label>Método
+        <select id="metodo">
+          <option value="estandar">Arreglo estándar (15, 14, 13, 12, 10, 8)</option>
+          <option value="aleatorio">Aleatorio (4d6 quitando el menor)</option>
+          <option value="compra">Compra de puntos (27)</option>
+          <option value="custom">Personalizado (3–20)</option>
+        </select>
+      </label>
+      <button id="tirar" hidden>🎲 Tirar 4d6 ×6</button>
+      <span id="pool" class="pool"></span>
+      <span id="puntos" class="pool"></span>
+    </div>
+    <table class="tabla-car">
+      <thead><tr><th></th><th>Base</th><th>Raza</th><th>Total</th><th>Mod</th></tr></thead>
+      <tbody id="filas-car"></tbody>
+    </table>
+    <p class="derivados">PG máximos <b id="pg">—</b> · CA <b id="ca">—</b></p>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Retrato</h2>
+    <div class="fila">
+      <div id="vista-previa" class="vista-previa">?</div>
+      <label>Imagen (PNG, JPG o WEBP, máx. 2 MB)
+        <input id="foto" type="file" accept="image/png,image/jpeg,image/webp">
+      </label>
+    </div>
+  </section>
+
+  <p id="aviso" class="aviso"></p>
+  <div class="fila acciones">
+    <button id="crear">Crear personaje</button>
+    <a href="/">Ir a la mesa</a>
+  </div>
+</main>
+<script type="module" src="/js/personaje.js"></script>
+</body>
+</html>

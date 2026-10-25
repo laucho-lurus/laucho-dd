@@ -32,7 +32,14 @@ export function pintarRetratos(estado, alAjustarPg) {
     const barra = el('span');
     barra.style.width = `${porcentaje}%`;
     vida.append(barra);
-    r.append(el('div', 'circulo', iniciales(j.nombre)), el('div', 'nombre', j.nombre), vida);
+    const circulo = el('div', 'circulo', j.imagen_url ? '' : iniciales(j.nombre));
+    if (j.imagen_url) {
+      const img = el('img');
+      img.src = j.imagen_url;
+      img.alt = j.nombre;
+      circulo.append(img);
+    }
+    r.append(circulo, el('div', 'nombre', j.nombre), vida);
     if (j.inconsciente) r.append(el('div', 'estado-pg', 'Inconsciente'));
     if (alAjustarPg) r.append(ajustePg(j.personaje_id, alAjustarPg));
     return r;
