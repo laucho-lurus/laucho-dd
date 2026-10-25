@@ -99,29 +99,89 @@ test('el GM pasa el turno y solo el GM puede', async () => {
   assert.equal(gm.ultimo().estado.turno_de, PJ[1]);
 });
 
-test('tirada válida se difunde con total', async () => {
-  const { gestor, gm, codigo } = await salaConGm();
-  const a = await jugador(gestor, codigo, PJ[0]);
-  await a.enviar({ tipo: 'tirar', notacion: '1d20+5', motivo: 'Percepción' });
+test('el GM tira libre cuando quiere', async () => {
+  const { gm } = await salaConGm();
+  await gm.enviar({ tipo: 'tirar', notacion: '1d20+5' });
+  await gm.enviar({ tipo: 'tirar', notacion: '2d6' });
   const ev = gm.ultimo().evento;
   assert.equal(ev.tipo, 'tirada');
-  assert.ok(ev.datos.total >= 6 && ev.datos.total <= 25);
-  assert.equal(ev.datos.motivo, 'Percepción');
+  assert.ok(ev.datos.total >= 2 && ev.datos.total <= 12);
 });
 
-test('tirada inválida da error y no se guarda', async () => {
-  const { repo, gestor, codigo } = await salaConGm();
-  const a = await jugador(gestor, codigo, PJ[0]);
+test('tirada con notación inválida da error y no se guarda', async () => {
+  const { repo, gm } = await salaConGm();
   const antes = repo.todosLosEventos().length;
-  await a.enviar({ tipo: 'tirar', notacion: 'banana' });
-  assert.equal(a.ultimo().tipo, 'error');
+  await gm.enviar({ tipo: 'tirar', notacion: 'banana' });
+  assert.equal(gm.ultimo().tipo, 'error');
   assert.equal(repo.todosLosEventos().length, antes);
+});
+
+test('un jugador sin petición pendiente no puede tirar', async () => {
+  const { gestor, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[0]);
+  await a.enviar({ tipo: 'tirar', notacion: '1d20' });
+  assert.match(a.ultimo().mensaje, /ninguna tirada pendiente/);
+});
+
+test('la petición del GM se consume con una sola tirada y usa su notación', async () => {
+  const { gestor, gm, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[0]);
+  await gm.enviar({ tipo: 'pedir_tirada', personaje_id: PJ[0], notacion: '1d4+100', motivo: 'Percepción' });
+  assert.deepEqual(a.ultimo().estado.jugadores[0].tirada_pendiente, { notacion: '1d4+100', motivo: 'Percepción' });
+
+  await a.enviar({ tipo: 'tirar', notacion: '1d20' });
+  const ev = gm.ultimo().evento;
+  assert.ok(ev.datos.total > 100);
+  assert.equal(ev.datos.motivo, 'Percepción');
+  assert.equal(ev.datos.exito, null);
+  assert.equal(gm.ultimo().estado.jugadores[0].tirada_pendiente, null);
+
+  await a.enviar({ tipo: 'tirar', notacion: '1d20' });
+  assert.equal(a.ultimo().tipo, 'error');
+});
+
+test('con CD el resultado dice éxito o fracaso, y la CD no se difunde', async () => {
+  const { gestor, gm, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[0]);
+  await gm.enviar({ tipo: 'pedir_tirada', personaje_id: PJ[0], notacion: '1d20', cd: 1 });
+  assert.ok(!JSON.stringify(a.ultimo()).includes('"cd"'));
+  await a.enviar({ tipo: 'tirar', notacion: '1d20' });
+  assert.equal(gm.ultimo().evento.datos.exito, true);
+
+  await gm.enviar({ tipo: 'pedir_tirada', personaje_id: PJ[0], notacion: '1d20', cd: 30 });
+  await a.enviar({ tipo: 'tirar', notacion: '1d20' });
+  assert.equal(gm.ultimo().evento.datos.exito, false);
+});
+
+test('solo el GM pide tiradas', async () => {
+  const { gestor, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[0]);
+  await a.enviar({ tipo: 'pedir_tirada', personaje_id: PJ[0], notacion: '1d20' });
+  assert.equal(a.ultimo().mensaje, 'Solo el GM puede hacer eso');
+});
+
+test('aplicar_pg respeta 0 y el máximo y marca inconsciente', async () => {
+  const { gestor, gm, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[1]); // Torvald, 13 PG
+  const pgDe = () => a.ultimo().estado.jugadores[0];
+
+  await gm.enviar({ tipo: 'aplicar_pg', personaje_id: PJ[1], cantidad: -5 });
+  assert.equal(pgDe().pg_actual, 8);
+  await gm.enviar({ tipo: 'aplicar_pg', personaje_id: PJ[1], cantidad: -50 });
+  assert.equal(pgDe().pg_actual, 0);
+  assert.equal(pgDe().inconsciente, true);
+  await gm.enviar({ tipo: 'aplicar_pg', personaje_id: PJ[1], cantidad: 99 });
+  assert.equal(pgDe().pg_actual, 13);
+  assert.equal(pgDe().inconsciente, false);
+
+  await a.enviar({ tipo: 'aplicar_pg', personaje_id: PJ[1], cantidad: 5 });
+  assert.equal(a.ultimo().mensaje, 'Solo el GM puede hacer eso');
 });
 
 test('reconexión: retoma su asiento y recibe historial', async () => {
   const { gestor, gm, codigo } = await salaConGm();
   const a = await jugador(gestor, codigo, PJ[0]);
-  await a.enviar({ tipo: 'tirar', notacion: '1d6' });
+  await a.enviar({ tipo: 'accion', texto: 'Enciendo una antorcha' });
   a.cerrar();
   await gm.enviar({ tipo: 'estado' });
   assert.equal(gm.ultimo().estado.jugadores[0].conectado, false);
@@ -130,7 +190,7 @@ test('reconexión: retoma su asiento y recibe historial', async () => {
   const bienvenida = vuelta.recibidos.find((m) => m.tipo === 'bienvenida')!;
   assert.equal(bienvenida.estado.jugadores.length, 1);
   assert.equal(bienvenida.estado.jugadores[0].conectado, true);
-  assert.ok(bienvenida.historial.some((e: Msj) => e.tipo === 'tirada'));
+  assert.ok(bienvenida.historial.some((e: Msj) => e.tipo === 'accion'));
 });
 
 test('sala llena: el séptimo jugador no entra', async () => {

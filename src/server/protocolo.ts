@@ -14,6 +14,8 @@ export type MensajeCliente =
   | { tipo: 'narracion'; texto: string }
   | { tipo: 'tirar'; notacion: string; motivo?: string }
   | { tipo: 'definir_orden'; orden: string[] }
+  | { tipo: 'pedir_tirada'; personaje_id: string; notacion: string; motivo?: string; cd?: number }
+  | { tipo: 'aplicar_pg'; personaje_id: string; cantidad: number }
   | { tipo: 'siguiente_turno' }
   | { tipo: 'estado' };
 
@@ -33,6 +35,19 @@ function texto(o: Obj, campo: string, max: number): string | { error: string } {
   if (t.length > max) return { error: `"${campo}" supera ${max} caracteres` };
   return t;
 }
+
+/** Entero opcional dentro de [min, max]. undefined si no viene. */
+function entero(o: Obj, campo: string, min: number, max: number): number | undefined | { error: string } {
+  const v = o[campo];
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
+    return { error: `"${campo}" debe ser un entero entre ${min} y ${max}` };
+  }
+  return v;
+}
+
+export const MAX_CD = 40;
+export const MAX_PG_CAMBIO = 999;
 
 const esError = (v: unknown): v is { error: string } => typeof v === 'object' && v !== null;
 
@@ -83,6 +98,25 @@ export function validarMensaje(crudo: string): Validacion {
       if (m.motivo === undefined) return bien({ tipo: 'tirar', notacion });
       const motivo = texto(m, 'motivo', MAX_ID * 2);
       return esError(motivo) ? falla(motivo.error) : bien({ tipo: 'tirar', notacion, motivo });
+    }
+    case 'pedir_tirada': {
+      const personaje_id = texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      const notacion = texto(m, 'notacion', MAX_NOTACION);
+      if (esError(notacion)) return falla(notacion.error);
+      const motivo = m.motivo === undefined || m.motivo === '' ? undefined : texto(m, 'motivo', MAX_ID * 2);
+      if (esError(motivo)) return falla(motivo.error);
+      const cd = entero(m, 'cd', 1, MAX_CD);
+      if (esError(cd)) return falla(cd.error);
+      return bien({ tipo: 'pedir_tirada', personaje_id, notacion, ...(motivo && { motivo }), ...(cd !== undefined && { cd }) });
+    }
+    case 'aplicar_pg': {
+      const personaje_id = texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      const cantidad = entero(m, 'cantidad', -MAX_PG_CAMBIO, MAX_PG_CAMBIO);
+      if (esError(cantidad)) return falla(cantidad.error);
+      if (!cantidad) return falla('"cantidad" debe ser un entero distinto de 0');
+      return bien({ tipo: 'aplicar_pg', personaje_id, cantidad });
     }
     case 'definir_orden': {
       const orden = m.orden;

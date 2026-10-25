@@ -18,6 +18,8 @@ export interface EstadoJugador {
   caracteristicas: Caracteristicas;
   pg_max: number;
   pg_actual: number;
+  inconsciente: boolean;
+  tirada_pendiente: { notacion: string; motivo: string | null } | null;
   ca: number | null;
   armas: Arma[];
   conectado: boolean;
@@ -32,6 +34,13 @@ export interface EstadoSala {
   turno_de: string | null;
   ronda: number;
   max_jugadores: number;
+}
+
+/** Tirada que el GM pidió a un jugador. La CD solo la conoce el servidor (y el GM). */
+export interface Peticion {
+  notacion: string;
+  motivo: string | null;
+  cd: number | null;
 }
 
 type Resultado = { ok: true } | { ok: false; error: string };
@@ -49,6 +58,8 @@ export class Sala {
   private readonly tokenGm: string | null;
   private gm: Cliente | null = null;
   private readonly asientos = new Map<string, Cliente | null>(); // personaje_id → conexión (null = desconectado)
+  private readonly pg = new Map<string, number>(); // personaje_id → PG actuales
+  private readonly peticiones = new Map<string, Peticion>(); // personaje_id → tirada pedida
   private orden: string[] = [];
   private turno = 0;
   private ronda = 1;
@@ -59,6 +70,7 @@ export class Sala {
     this.campana = campana;
     this.personajes = new Map(personajes.map((p) => [p.id, p]));
     this.tokenGm = tokenGm;
+    for (const p of personajes) this.pg.set(p.id, p.pg_actual);
   }
 
   /** Ejecuta las tareas de la sala de a una, en orden de llegada, aunque sean asíncronas. */
@@ -109,6 +121,28 @@ export class Sala {
     for (const [id, c] of this.asientos) if (c === cliente) this.asientos.set(id, null);
   }
 
+  pedirTirada(personajeId: string, peticion: Peticion): Resultado {
+    if (!this.asientos.has(personajeId)) return error('Ese personaje no está en la sala');
+    this.peticiones.set(personajeId, peticion);
+    return ok;
+  }
+
+  /** Saca la petición pendiente del personaje (se consume con una sola tirada). */
+  tomarPeticion(personajeId: string): Peticion | null {
+    const p = this.peticiones.get(personajeId) ?? null;
+    this.peticiones.delete(personajeId);
+    return p;
+  }
+
+  /** Suma o resta PG sin bajar de 0 ni pasar del máximo. Devuelve los PG resultantes. */
+  aplicarPg(personajeId: string, cantidad: number): { ok: true; pg: number } | { ok: false; error: string } {
+    const p = this.personajes.get(personajeId);
+    if (!p || !this.asientos.has(personajeId)) return { ok: false, error: 'Ese personaje no está en la sala' };
+    const pg = Math.max(0, Math.min(p.pg_max, (this.pg.get(personajeId) ?? 0) + cantidad));
+    this.pg.set(personajeId, pg);
+    return { ok: true, pg };
+  }
+
   rolDe(cliente: Cliente): Rol | null {
     if (this.gm === cliente) return { rol: 'gm' };
     for (const [id, c] of this.asientos) if (c === cliente) return { rol: 'jugador', personaje_id: id };
@@ -154,7 +188,9 @@ export class Sala {
           nivel: p.nivel,
           caracteristicas: p.caracteristicas,
           pg_max: p.pg_max,
-          pg_actual: p.pg_actual,
+          pg_actual: this.pg.get(id)!,
+          inconsciente: this.pg.get(id) === 0,
+          tirada_pendiente: this.peticionPublica(id),
           ca: p.datos.ca ?? null,
           armas: p.datos.armas ?? [],
           conectado: c !== null,
@@ -165,6 +201,11 @@ export class Sala {
       ronda: this.ronda,
       max_jugadores: MAX_JUGADORES,
     };
+  }
+
+  private peticionPublica(id: string) {
+    const p = this.peticiones.get(id);
+    return p ? { notacion: p.notacion, motivo: p.motivo } : null;
   }
 
   /** Envía el mensaje a todos los conectados (GM y jugadores). */

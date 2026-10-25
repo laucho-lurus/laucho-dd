@@ -176,13 +176,42 @@ export class Gestor {
         soloGm(quien);
         return this.publicar(sala, 'mensaje', autor, { texto: m.texto, personaje_nombre: nombre });
       case 'tirar': {
-        let r;
-        try {
-          r = roll(m.notacion);
-        } catch (err) {
-          throw new ErrorDeJuego((err as Error).message);
+        if (quien.rol === 'gm') {
+          return this.publicar(sala, 'tirada', autor, { ...tirar(m.notacion), motivo: m.motivo ?? null, personaje_nombre: nombre });
         }
-        return this.publicar(sala, 'tirada', autor, { ...r, motivo: m.motivo ?? null, personaje_nombre: nombre });
+        const peticion = sala.tomarPeticion(quien.personaje_id);
+        if (!peticion) throw new ErrorDeJuego('No tienes ninguna tirada pendiente: espera a que el GM te pida una');
+        const r = tirar(peticion.notacion);
+        const exito = peticion.cd === null ? null : r.total >= peticion.cd;
+        return this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre });
+      }
+      case 'pedir_tirada': {
+        soloGm(quien);
+        tirar(m.notacion); // valida la notación antes de dejarla pendiente
+        const peticion = { notacion: m.notacion, motivo: m.motivo ?? null, cd: m.cd ?? null };
+        const r = sala.pedirTirada(m.personaje_id, peticion);
+        if (!r.ok) throw new ErrorDeJuego(r.error);
+        const destino = sala.personaje(m.personaje_id)!.nombre;
+        return this.publicar(sala, 'estado', autor, {
+          cambio: 'pedir_tirada',
+          personaje_id: m.personaje_id,
+          personaje_nombre: destino,
+          notacion: peticion.notacion,
+          motivo: peticion.motivo,
+        });
+      }
+      case 'aplicar_pg': {
+        soloGm(quien);
+        const r = sala.aplicarPg(m.personaje_id, m.cantidad);
+        if (!r.ok) throw new ErrorDeJuego(r.error);
+        return this.publicar(sala, 'estado', autor, {
+          cambio: 'pg',
+          personaje_id: m.personaje_id,
+          personaje_nombre: sala.personaje(m.personaje_id)!.nombre,
+          cantidad: m.cantidad,
+          pg_actual: r.pg,
+          inconsciente: r.pg === 0,
+        });
       }
       case 'definir_orden': {
         soloGm(quien);
@@ -213,6 +242,14 @@ export class Gestor {
       evento = { ...nuevo, id: null, creado_en: new Date().toISOString() };
     }
     sala.difundir({ tipo: 'evento', evento, estado: sala.estado() });
+  }
+}
+
+function tirar(notacion: string) {
+  try {
+    return roll(notacion);
+  } catch (err) {
+    throw new ErrorDeJuego((err as Error).message);
   }
 }
 
