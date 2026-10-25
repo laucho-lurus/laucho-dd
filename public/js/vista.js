@@ -125,6 +125,7 @@ export function agregarEvento(evento, nombreDe) {
       break;
     default:
       p = el('p', 'sistema', textoDeEstado(d, nombreDe));
+      if (d.ia && d.firma) p.prepend(el('span', 'etiqueta-ia', d.firma));
   }
   if (evento.id != null) p.dataset.id = evento.id;
   const narracion = $('narracion');
@@ -146,7 +147,7 @@ function textoDeEstado(d, nombreDe) {
   if (d.cambio === 'pedir_tirada') return `El GM pide a ${d.personaje_nombre} una tirada${d.motivo ? ` de ${d.motivo}` : ''} (${d.notacion}).`;
   if (d.cambio === 'pg') {
     const verbo = d.cantidad < 0 ? `recibe ${-d.cantidad} de daño` : `recupera ${d.cantidad} PG`;
-    return `${d.personaje_nombre} ${verbo} (${d.pg_actual} PG)${d.inconsciente ? ' y cae inconsciente' : ''}.`;
+    return `${d.personaje_nombre} ${verbo}${d.motivo ? ` (${d.motivo})` : ''}: ${d.pg_actual} PG${d.inconsciente ? ', inconsciente' : ''}.`;
   }
   if (d.texto) return d.texto; // avisos de IA, pausa, deshacer
   if (d.cambio === 'nodo') return `— ${d.titulo ?? 'La historia avanza'} —`;

@@ -144,3 +144,4 @@ input, select, textarea {
 .narracion .etiqueta-ia { display: block; font-family: 'Cinzel', serif; font-size: .7rem; color: #8a6d3b; letter-spacing: 1px; }
 .narracion .deshecho { display: none; }
 .avisos-base { display: block; color: #f0b37e; font-size: .75rem; }
+.casilla { display: inline-flex; align-items: center; gap: 4px; color: var(--tenue); font-size: .85rem; }

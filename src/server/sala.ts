@@ -7,8 +7,16 @@ export interface IaSala {
   perfil: PerfilGm;
   pausada: boolean;
   en_curso: Promise<void> | null;
-  ultima: number[]; // ids de eventos de su última intervención (para deshacer)
+  puede_pg: boolean; // casilla del GM: la IA puede aplicar daño/curación
+  ultima: IntervencionIa; // lo que hizo en su última intervención (para deshacer)
 }
+
+export interface IntervencionIa {
+  eventos: number[];
+  pg: { personaje_id: string; delta: number }[]; // cambios reales de PG (ya recortados a 0 y al máximo)
+}
+
+export const SIN_INTERVENCION: IntervencionIa = { eventos: [], pg: [] };
 
 export const MAX_JUGADORES = 6;
 
@@ -199,6 +207,10 @@ export class Sala {
     const p = this.peticiones.get(personajeId) ?? null;
     this.peticiones.delete(personajeId);
     return p;
+  }
+
+  pgDe(personajeId: string): number | undefined {
+    return this.pg.get(personajeId);
   }
 
   /** Suma o resta PG sin bajar de 0 ni pasar del máximo. Devuelve los PG resultantes. */

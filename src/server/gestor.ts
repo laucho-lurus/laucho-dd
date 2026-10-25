@@ -48,6 +48,7 @@ export class Gestor {
           publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
           pedirTirada: (sala, autor, id, tirada, motivo, cd) => this.pedirTirada(sala, autor, id, tirada, motivo, cd),
           guardarEstado: (sala) => this.guardarEstado(sala),
+          aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
         })
       : null;
   }
@@ -252,9 +253,23 @@ export class Gestor {
       }
       case 'deshacer_ia': {
         soloGm(quien);
-        const ids = this.ia?.deshacer(sala) ?? [];
-        if (ids.length === 0) throw new ErrorDeJuego('No hay ninguna intervención de la IA para deshacer');
-        return this.publicar(sala, 'estado', autor, { cambio: 'deshacer_ia', eventos: ids, texto: 'El GM deshizo la última intervención de la IA.' });
+        const ultima = this.ia?.deshacer(sala);
+        if (!ultima || ultima.eventos.length + ultima.pg.length === 0) throw new ErrorDeJuego('No hay ninguna intervención de la IA para deshacer');
+        for (const { personaje_id, delta } of [...ultima.pg].reverse()) {
+          const r = sala.aplicarPg(personaje_id, -delta);
+          if (r.ok) await this.guardarPg(personaje_id, r.pg);
+        }
+        return this.publicar(sala, 'estado', autor, {
+          cambio: 'deshacer_ia',
+          eventos: ultima.eventos,
+          texto: `El GM deshizo la última intervención de la IA${ultima.pg.length ? ' (PG restaurados)' : ''}.`,
+        });
+      }
+      case 'ia_permitir_pg': {
+        soloGm(quien);
+        const error = this.ia ? this.ia.permitirPg(sala, m.permitido) : 'Esta sala no tiene GM IA';
+        if (error) throw new ErrorDeJuego(error);
+        return this.ia!.enviarPanel(sala);
       }
       case 'cambiar_nodo': {
         soloGm(quien);
@@ -265,17 +280,8 @@ export class Gestor {
       }
       case 'aplicar_pg': {
         soloGm(quien);
-        const r = sala.aplicarPg(m.personaje_id, m.cantidad);
-        if (!r.ok) throw new ErrorDeJuego(r.error);
-        await this.guardarPg(m.personaje_id, r.pg);
-        return this.publicar(sala, 'estado', autor, {
-          cambio: 'pg',
-          personaje_id: m.personaje_id,
-          personaje_nombre: sala.personaje(m.personaje_id)!.nombre,
-          cantidad: m.cantidad,
-          pg_actual: r.pg,
-          inconsciente: r.pg === 0,
-        });
+        await this.aplicarPg(sala, autor, m.personaje_id, m.cantidad, {});
+        return;
       }
       case 'definir_orden': {
         soloGm(quien);
@@ -292,6 +298,24 @@ export class Gestor {
       default:
         throw new ErrorDeJuego('Ya estás en una sala');
     }
+  }
+
+  /** Aplica daño/curación (GM humano o IA), guarda los PG y publica el evento. */
+  private async aplicarPg(sala: Sala, autor: string, personajeId: string, cantidad: number, extra: Record<string, unknown>) {
+    const antes = sala.pgDe(personajeId);
+    const r = sala.aplicarPg(personajeId, cantidad);
+    if (!r.ok || antes === undefined) throw new ErrorDeJuego(r.ok ? 'Ese personaje no está en la sala' : r.error);
+    await this.guardarPg(personajeId, r.pg);
+    const evento = await this.publicar(sala, 'estado', autor, {
+      ...extra,
+      cambio: 'pg',
+      personaje_id: personajeId,
+      personaje_nombre: sala.personaje(personajeId)!.nombre,
+      cantidad,
+      pg_actual: r.pg,
+      inconsciente: r.pg === 0,
+    });
+    return { evento, delta: r.pg - antes };
   }
 
   /** Deja pendiente una tirada para un jugador (GM humano o IA). */

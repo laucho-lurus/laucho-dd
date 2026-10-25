@@ -150,3 +150,37 @@ test('tras reiniciar el servidor, la sala se retoma con nodo, variables, PG, his
   assert.equal(guardada.ia_pausada, true);
   assert.equal(guardada.ia_perfil_id, 'cronista');
 });
+
+test('la IA aplica daño, sale etiquetado y "Deshacer IA" lo revierte', async () => {
+  const { gestor, humano, jugador, codigo } = await mesa([
+    respuesta([usar('aplicar_pg', { personaje: BRISA, cantidad: -20, motivo: 'cae al pozo' })]),
+    respuesta([usar('narrar', { texto: 'Brisa queda tendida.' })], 'end_turn'),
+  ]);
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  const pg = eventos(jugador).find((e) => e.datos.cambio === 'pg');
+  assert.equal(pg.autor, 'gm_ia');
+  assert.equal(pg.datos.motivo, 'cae al pozo');
+  assert.equal(pg.datos.firma, 'GM IA · La Tabernera');
+  assert.equal(pg.datos.pg_actual, 0); // 9 PG: no baja de 0
+  assert.equal(pg.datos.inconsciente, true);
+
+  await humano.enviar({ tipo: 'deshacer_ia' });
+  const brisa = jugador.ultimo().estado.jugadores[0];
+  assert.equal(brisa.pg_actual, 9); // revierte solo lo realmente aplicado (−9)
+  assert.equal(brisa.inconsciente, false);
+  assert.equal(eventos(humano).at(-1).datos.eventos.length, 2);
+});
+
+test('con la casilla apagada la IA no puede tocar los PG', async () => {
+  const { gestor, humano, jugador, codigo, llamadas } = await mesa([
+    respuesta([usar('aplicar_pg', { personaje: BRISA, cantidad: -3, motivo: 'x' })]),
+    respuesta([usar('narrar', { texto: 'Uf.' })], 'end_turn'),
+  ]);
+  await humano.enviar({ tipo: 'ia_permitir_pg', permitido: false });
+  assert.equal(humano.ultimo().ia.puede_pg, false);
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  assert.ok(!llamadas[0].tools!.some((t) => 'name' in t && t.name === 'aplicar_pg'));
+  assert.equal(jugador.ultimo().estado.jugadores[0].pg_actual, 9);
+});

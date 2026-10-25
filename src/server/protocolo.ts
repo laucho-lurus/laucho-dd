@@ -19,6 +19,7 @@ export type MensajeCliente =
   | { tipo: 'narrar_escena' }
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
+  | { tipo: 'ia_permitir_pg'; permitido: boolean }
   | { tipo: 'cambiar_nodo'; nodo_id: string }
   | { tipo: 'siguiente_turno' }
   | { tipo: 'estado' };
@@ -138,6 +139,9 @@ export function validarMensaje(crudo: string): Validacion {
     case 'pausar_ia':
       if (typeof m.pausada !== 'boolean') return falla('"pausada" debe ser true o false');
       return bien({ tipo: 'pausar_ia', pausada: m.pausada });
+    case 'ia_permitir_pg':
+      if (typeof m.permitido !== 'boolean') return falla('"permitido" debe ser true o false');
+      return bien({ tipo: 'ia_permitir_pg', permitido: m.permitido });
     case 'cambiar_nodo': {
       const nodo_id = texto(m, 'nodo_id', MAX_ID);
       return esError(nodo_id) ? falla(nodo_id.error) : bien({ tipo: 'cambiar_nodo', nodo_id });

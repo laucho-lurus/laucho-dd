@@ -23,6 +23,7 @@ const contexto = (): Contexto => ({
   variables: { antorchas_encendidas: false },
   jugadores: [jugador],
   eventos: [],
+  permitir_pg: true,
 });
 
 const uso = { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
@@ -51,6 +52,7 @@ function accionesFalsas() {
     pedirTirada: async (j, t, cd, m) => (hechas.push(`tirada:${j}:${t}:${cd}:${m}`), 'tirada pedida'),
     avanzarNodo: async (n) => (hechas.push(`nodo:${n}`), 'ok'),
     fijarVariable: async (n, v) => (hechas.push(`var:${n}=${v}`), 'ok'),
+    aplicarPg: async (p, n, m) => (hechas.push(`pg:${p}:${n}:${m}`), 'ok'),
   };
   return { acciones, hechas };
 }
@@ -136,4 +138,35 @@ test('el gasto se reinicia al cambiar de mes', async () => {
   await new Presupuesto(archivo, 5, () => fecha).registrar(4.5);
   fecha = new Date('2026-11-01T01:00:00Z');
   assert.equal((await new Presupuesto(archivo, 5, () => fecha).estado()).gastado, 0);
+});
+
+test('aplicar_pg: aplica, respeta 25 por llamada y 2 por intervención', async () => {
+  const { cliente, peticiones } = clienteFalso([
+    respuesta([
+      herramienta('aplicar_pg', { personaje: 'pj1', cantidad: -30, motivo: 'caída' }, 'a'),
+      herramienta('aplicar_pg', { personaje: 'otro', cantidad: -3, motivo: 'x' }, 'b'),
+      herramienta('aplicar_pg', { personaje: 'pj1', cantidad: -4, motivo: 'mordisco' }, 'c'),
+      herramienta('aplicar_pg', { personaje: 'pj1', cantidad: 2, motivo: 'poción' }, 'd'),
+      herramienta('aplicar_pg', { personaje: 'pj1', cantidad: -1, motivo: 'otra' }, 'e'),
+    ]),
+    respuesta([], 'end_turn'),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', acciones, () => {});
+  assert.deepEqual(hechas, ['pg:pj1:-4:mordisco', 'pg:pj1:2:poción']);
+  const r = peticiones[1].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
+  assert.deepEqual(r.map((x) => Boolean(x.is_error)), [true, true, false, false, true]);
+  assert.match(String(r[4].content), /2 veces/);
+  assert.match(promptSistema(PERFILES_INICIALES[0]), /solo tras una tirada ya resuelta/);
+});
+
+test('con la casilla apagada la herramienta no se ofrece y se rechaza', async () => {
+  const { cliente, peticiones } = clienteFalso([
+    respuesta([herramienta('aplicar_pg', { personaje: 'pj1', cantidad: -2, motivo: 'x' })]),
+    respuesta([], 'end_turn'),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => ({ ...contexto(), permitir_pg: false }), 'x', acciones, () => {});
+  assert.ok(!peticiones[0].tools!.some((t) => 'name' in t && t.name === 'aplicar_pg'));
+  assert.deepEqual(hechas, []);
 });

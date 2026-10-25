@@ -107,12 +107,13 @@ function pintarPanel(p) {
   const usd = (n) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`);
   const gasto = p.gasto ? `IA: ${usd(p.gasto.gastado)} de $${p.gasto.tope.toFixed(2)}` : 'IA no disponible';
   estado.textContent = ia ? `${gasto} · ${ia.perfil} · ${ia.pensando ? 'pensando…' : ia.pausada ? 'pausada' : 'activa'}` : `${gasto} · GM humano`;
-  $('narrar-escena').hidden = $('pausar-ia').hidden = $('deshacer-ia').hidden = !ia;
+  $('narrar-escena').hidden = $('pausar-ia').hidden = $('deshacer-ia').hidden = $('etiqueta-ia-pg').hidden = !ia;
   if (ia) {
     $('pausar-ia').textContent = ia.pausada ? 'Reanudar IA' : 'Pausar IA';
     $('pausar-ia').dataset.pausada = ia.pausada;
     $('narrar-escena').disabled = ia.pausada || ia.pensando;
     $('deshacer-ia').disabled = !ia.puede_deshacer;
+    $('ia-pg').checked = ia.puede_pg;
   }
   $('avisos-base').hidden = !p.avisos?.length;
   $('avisos-base').textContent = (p.avisos ?? []).join(' · ');
@@ -123,6 +124,7 @@ function pintarPanel(p) {
 
 $('narrar-escena').addEventListener('click', () => servidor.enviar({ tipo: 'narrar_escena' }));
 $('pausar-ia').addEventListener('click', () => servidor.enviar({ tipo: 'pausar_ia', pausada: $('pausar-ia').dataset.pausada !== 'true' }));
+$('ia-pg').addEventListener('change', () => servidor.enviar({ tipo: 'ia_permitir_pg', permitido: $('ia-pg').checked }));
 $('deshacer-ia').addEventListener('click', () => servidor.enviar({ tipo: 'deshacer_ia' }));
 $('nodo').addEventListener('change', () => servidor.enviar({ tipo: 'cambiar_nodo', nodo_id: $('nodo').value }));
 

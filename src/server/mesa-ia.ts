@@ -5,7 +5,7 @@ import type { GmIa } from '../ia/gm-ia.ts';
 import type { EstadoGasto } from '../ia/presupuesto.ts';
 import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
-import type { Sala } from './sala.ts';
+import { SIN_INTERVENCION, type IntervencionIa, type Sala } from './sala.ts';
 
 const AUTOR_IA = 'gm_ia';
 const EVENTOS_CONTEXTO = 20;
@@ -17,6 +17,8 @@ export interface Puertos {
   pedirTirada(sala: Sala, autor: string, personajeId: string, tirada: { chequeo?: string; notacion?: string }, motivo: string | null, cd: number | null): Promise<void>;
   registro(mensaje: string, err?: unknown): void;
   guardarEstado(sala: Sala): Promise<void>;
+  /** Aplica PG y publica el evento. Devuelve el cambio real (tras recortar a 0 y al máximo). */
+  aplicarPg(sala: Sala, autor: string, personajeId: string, cantidad: number, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; delta: number }>;
 }
 
 const AVISOS: Record<EstadoGasto['nivel'], (e: EstadoGasto) => string> = {
@@ -45,7 +47,7 @@ export class MesaIa {
     if (!this.gm) return 'La IA está desactivada: falta ANTHROPIC_API_KEY en el servidor';
     const perfil = await this.perfiles.buscar(perfilId);
     if (!perfil) return 'No existe ese perfil de GM';
-    sala.ia = { perfil, pausada: false, en_curso: null, ultima: [] };
+    sala.ia = { perfil, pausada: false, en_curso: null, puede_pg: true, ultima: SIN_INTERVENCION };
     return null;
   }
 
@@ -68,17 +70,23 @@ export class MesaIa {
     await sala.ia?.en_curso;
   }
 
+  permitirPg(sala: Sala, permitido: boolean) {
+    if (!sala.ia) return 'Esta sala no tiene GM IA';
+    sala.ia = { ...sala.ia, puede_pg: permitido };
+    return null;
+  }
+
   pausar(sala: Sala, pausada: boolean) {
     if (!sala.ia) return 'Esta sala no tiene GM IA';
     sala.ia = { ...sala.ia, pausada };
     return null;
   }
 
-  /** Ids de los eventos de la última intervención, que el cliente oculta. */
-  deshacer(sala: Sala): number[] {
-    const ids = sala.ia?.ultima ?? [];
-    if (sala.ia) sala.ia = { ...sala.ia, ultima: [] };
-    return ids;
+  /** Lo que hizo la última intervención: el gestor oculta sus eventos y revierte sus PG. */
+  deshacer(sala: Sala): IntervencionIa {
+    const ultima = sala.ia?.ultima ?? SIN_INTERVENCION;
+    if (sala.ia) sala.ia = { ...sala.ia, ultima: SIN_INTERVENCION };
+    return ultima;
   }
 
   private async intervenir(sala: Sala, disparador: string) {
@@ -86,6 +94,7 @@ export class MesaIa {
     const perfil = sala.ia!.perfil;
     const firma = `GM IA · ${perfil.nombre}`;
     const ids: number[] = [];
+    const cambiosPg: IntervencionIa['pg'] = [];
     const anotar = (e: Evento | { id: null }) => {
       if (e.id !== null) ids.push(e.id);
     };
@@ -98,6 +107,7 @@ export class MesaIa {
           variables: sala.variables(),
           jugadores: sala.estado().jugadores,
           eventos: await this.puertos.repo.ultimosEventos(sala.sesion.id, EVENTOS_CONTEXTO),
+          permitir_pg: sala.ia?.puede_pg ?? false,
         }),
         disparador,
         {
@@ -120,6 +130,13 @@ export class MesaIa {
             anotar(await this.puertos.publicar(sala, 'estado', AUTOR_IA, { cambio: 'nodo', nodo_id: nodoId, titulo: buscarNodo(sala.diagrama, nodoId)?.titulo, personaje_nombre: firma, ia: true }));
             return `Ahora en el nodo ${nodoId}`;
           }),
+          aplicarPg: (personajeId, cantidad, motivo) => sala.encolar(async () => {
+            if (!sala.ia?.puede_pg) return 'El GM humano desactivó que apliques daño o curación';
+            const r = await this.puertos.aplicarPg(sala, AUTOR_IA, personajeId, cantidad, { motivo, ia: true, firma });
+            anotar(r.evento);
+            if (r.delta !== 0) cambiosPg.push({ personaje_id: personajeId, delta: r.delta });
+            return `PG cambiados en ${r.delta} (${sala.pgDe(personajeId)} actuales)`;
+          }),
           fijarVariable: (nombre, valor) => sala.encolar(async () => {
             const r = sala.fijarVariable(nombre, valor);
             if (!r.ok) return r.error;
@@ -137,7 +154,7 @@ export class MesaIa {
       // Mensaje del SDK o de red; nunca incluye la key.
       sala.enviarGm({ tipo: 'error', mensaje: `La IA falló: ${(err as Error).message}`.slice(0, 300) });
     } finally {
-      if (sala.ia && ids.length) sala.ia = { ...sala.ia, ultima: ids };
+      if (sala.ia && (ids.length || cambiosPg.length)) sala.ia = { ...sala.ia, ultima: { eventos: ids, pg: cambiosPg } };
     }
   }
 
@@ -153,7 +170,7 @@ export class MesaIa {
       salidas: salidas(sala.diagrama, sala.nodoActual()),
       variables: sala.variables(),
       ia: sala.ia
-        ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: sala.ia.en_curso !== null, puede_deshacer: sala.ia.ultima.length > 0 }
+        ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: sala.ia.en_curso !== null, puede_deshacer: sala.ia.ultima.eventos.length + sala.ia.ultima.pg.length > 0, puede_pg: sala.ia.puede_pg }
         : null,
       ia_disponible: this.disponible(),
       gasto,

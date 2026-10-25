@@ -10,6 +10,8 @@ import type { PerfilGm } from './perfiles.ts';
 
 export const MAX_TOKENS = 500;
 export const MAX_VUELTAS = 3;
+export const MAX_PG_POR_LLAMADA = 25;
+export const MAX_PG_POR_TURNO = 2; // llamadas a aplicar_pg por disparador
 
 /** Lo único que usamos del SDK: así los tests inyectan un cliente falso. */
 export interface ClienteIa {
@@ -23,6 +25,7 @@ export interface Contexto {
   variables: Variables;
   jugadores: EstadoJugador[];
   eventos: Evento[];
+  permitir_pg: boolean; // casilla del GM humano
 }
 
 /** Acciones sobre la sala. Devuelven el texto que verá el modelo como resultado. */
@@ -31,6 +34,7 @@ export interface Acciones {
   pedirTirada(personajeId: string, tirada: string, cd: number | null, motivo: string | null): Promise<string>;
   avanzarNodo(nodoId: string): Promise<string>;
   fijarVariable(nombre: string, valor: boolean | number | string): Promise<string>;
+  aplicarPg(personajeId: string, cantidad: number, motivo: string): Promise<string>;
 }
 
 export type Aviso = (nivel: EstadoGasto['nivel'], estado: EstadoGasto) => void;
@@ -40,7 +44,7 @@ Reglas que siempre cumples:
 - Respondes siempre en español.
 - Narras con la herramienta "narrar", en máximo ~120 palabras por intervención.
 - Nunca inventas resultados de dados ni daño. Si una acción tiene un resultado incierto, pide una tirada con "pedir_tirada" y espera su resultado; no la resuelves tú.
-- No aplicas daño: si alguien debería recibirlo, propónlo en la narración y el GM humano lo aplicará.
+- Daño y curación: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
 - Solo avanzas a las salidas listadas del nodo actual ("avanzar_nodo") y solo cambias variables que ya existen ("fijar_variable").
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
 - Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.`;
@@ -63,6 +67,19 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
         motivo: { type: 'string' },
       },
       required: ['jugador', 'tirada'],
+    },
+  },
+  {
+    name: 'aplicar_pg',
+    description: 'Aplica daño (cantidad negativa) o curación (positiva) a un personaje de la mesa. Máx. 25 por llamada.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        personaje: { type: 'string', description: 'personaje_id' },
+        cantidad: { type: 'integer', minimum: -MAX_PG_POR_LLAMADA, maximum: MAX_PG_POR_LLAMADA },
+        motivo: { type: 'string', description: 'p. ej. "mordisco del lobo"' },
+      },
+      required: ['personaje', 'cantidad', 'motivo'],
     },
   },
   {
@@ -135,7 +152,9 @@ QUÉ PASÓ AHORA: ${disparador}`;
 }
 
 /** Valida una llamada a herramienta contra el contexto y la ejecuta. Devuelve el texto del resultado. */
-async function ejecutar(uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acciones): Promise<{ texto: string; error: boolean }> {
+async function ejecutar(
+  uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acciones, cuenta: { pg: number },
+): Promise<{ texto: string; error: boolean }> {
   const e = uso.input as Record<string, unknown>;
   const falla = (texto: string) => ({ texto, error: true });
   switch (uso.name) {
@@ -148,6 +167,18 @@ async function ejecutar(uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acci
       const cd = Number.isInteger(e.cd) ? (e.cd as number) : null;
       const motivo = typeof e.motivo === 'string' && e.motivo.trim() ? e.motivo.trim() : null;
       return { texto: await acciones.pedirTirada(e.jugador as string, e.tirada, cd, motivo), error: false };
+    }
+    case 'aplicar_pg': {
+      if (!c.permitir_pg) return falla('El GM humano desactivó que apliques daño o curación; propónlo en la narración');
+      if (cuenta.pg >= MAX_PG_POR_TURNO) return falla(`Ya aplicaste PG ${MAX_PG_POR_TURNO} veces en esta intervención`);
+      if (!c.jugadores.some((j) => j.personaje_id === e.personaje)) return falla('Ese personaje no está en la mesa; usa un id de la lista');
+      const n = e.cantidad;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n === 0 || Math.abs(n) > MAX_PG_POR_LLAMADA) {
+        return falla(`La cantidad debe ser un entero distinto de 0 entre -${MAX_PG_POR_LLAMADA} y ${MAX_PG_POR_LLAMADA}`);
+      }
+      if (typeof e.motivo !== 'string' || !e.motivo.trim()) return falla('Falta el motivo');
+      cuenta.pg += 1;
+      return { texto: await acciones.aplicarPg(e.personaje as string, n, e.motivo.trim()), error: false };
     }
     case 'avanzar_nodo': {
       const validas = salidas(c.campana.diagrama, c.nodo_actual).map((f) => f.hasta);
@@ -191,6 +222,8 @@ export class GmIa {
    */
   async turno(contexto: () => Promise<Contexto>, disparador: string, acciones: Acciones, avisar: Aviso): Promise<void> {
     let c = await contexto();
+    const cuenta = { pg: 0 };
+    const herramientas = c.permitir_pg ? HERRAMIENTAS : HERRAMIENTAS.filter((h) => h.name !== 'aplicar_pg');
     const sistema: Anthropic.TextBlockParam[] = [{ type: 'text', text: promptSistema(c.perfil), cache_control: { type: 'ephemeral' } }];
     const mensajes: Anthropic.MessageParam[] = [{ role: 'user', content: promptContexto(c, disparador) }];
 
@@ -202,7 +235,7 @@ export class GmIa {
         model: this.modelo,
         max_tokens: MAX_TOKENS,
         system: sistema,
-        tools: HERRAMIENTAS,
+        tools: herramientas,
         // Respuestas cortas y baratas: sin razonamiento extendido.
         thinking: this.modelo.startsWith('claude-sonnet') ? { type: 'between_tools' } : { type: 'disabled' },
         messages: mensajes,
@@ -220,7 +253,7 @@ export class GmIa {
       const resultados: Anthropic.ToolResultBlockParam[] = [];
       let soloNarro = true;
       for (const uso of usos) {
-        const r = await ejecutar(uso, c, acciones);
+        const r = await ejecutar(uso, c, acciones, cuenta);
         resultados.push({ type: 'tool_result', tool_use_id: uso.id, content: r.texto, ...(r.error && { is_error: true }) });
         soloNarro &&= uso.name === 'narrar' && !r.error;
       }
