@@ -6,7 +6,7 @@ const MAX_ID = 64;
 
 export type MensajeCliente =
   | { tipo: 'ver_campanas' }
-  | { tipo: 'crear_sesion'; campana_id: string }
+  | { tipo: 'crear_sesion'; campana_id: string; gm_perfil_id?: string }
   | { tipo: 'ver_personajes'; codigo: string }
   | { tipo: 'unirse'; codigo: string; personaje_id: string }
   | { tipo: 'retomar_gm'; codigo: string; token_gm: string }
@@ -16,6 +16,10 @@ export type MensajeCliente =
   | { tipo: 'definir_orden'; orden: string[] }
   | { tipo: 'pedir_tirada'; personaje_id: string; notacion?: string; chequeo?: string; motivo?: string; cd?: number }
   | { tipo: 'aplicar_pg'; personaje_id: string; cantidad: number }
+  | { tipo: 'narrar_escena' }
+  | { tipo: 'pausar_ia'; pausada: boolean }
+  | { tipo: 'deshacer_ia' }
+  | { tipo: 'cambiar_nodo'; nodo_id: string }
   | { tipo: 'siguiente_turno' }
   | { tipo: 'estado' };
 
@@ -67,7 +71,10 @@ export function validarMensaje(crudo: string): Validacion {
   switch (m.tipo) {
     case 'crear_sesion': {
       const campana_id = texto(m, 'campana_id', MAX_ID);
-      return esError(campana_id) ? falla(campana_id.error) : bien({ tipo: 'crear_sesion', campana_id });
+      if (esError(campana_id)) return falla(campana_id.error);
+      if (m.gm_perfil_id === undefined || m.gm_perfil_id === '') return bien({ tipo: 'crear_sesion', campana_id });
+      const gm_perfil_id = texto(m, 'gm_perfil_id', MAX_ID);
+      return esError(gm_perfil_id) ? falla(gm_perfil_id.error) : bien({ tipo: 'crear_sesion', campana_id, gm_perfil_id });
     }
     case 'ver_personajes': {
       const codigo = texto(m, 'codigo', MAX_ID);
@@ -128,6 +135,15 @@ export function validarMensaje(crudo: string): Validacion {
       }
       return bien({ tipo: 'definir_orden', orden });
     }
+    case 'pausar_ia':
+      if (typeof m.pausada !== 'boolean') return falla('"pausada" debe ser true o false');
+      return bien({ tipo: 'pausar_ia', pausada: m.pausada });
+    case 'cambiar_nodo': {
+      const nodo_id = texto(m, 'nodo_id', MAX_ID);
+      return esError(nodo_id) ? falla(nodo_id.error) : bien({ tipo: 'cambiar_nodo', nodo_id });
+    }
+    case 'narrar_escena':
+    case 'deshacer_ia':
     case 'ver_campanas':
     case 'siguiente_turno':
     case 'estado':

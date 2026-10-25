@@ -33,6 +33,10 @@ const NOMBRE_CAR: Readonly<Record<Car, string>> = {
   car: 'Carisma',
 };
 
+/** ¿Es una clave de habilidad o salvación ("percepcion", "salvacion_des")? */
+export const esChequeo = (clave: string) =>
+  Object.hasOwn(HABILIDADES, clave) || /^salvacion_(fue|des|con|int|sab|car)$/.test(clave);
+
 export const modificador = (valor: number) => Math.floor((valor - 10) / 2);
 
 /**

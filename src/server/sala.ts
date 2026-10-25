@@ -1,4 +1,14 @@
 import type { Arma, Campana, Caracteristicas, Personaje, Sesion } from './repositorio.ts';
+import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
+import type { PerfilGm } from '../ia/perfiles.ts';
+
+/** GM IA de la sala: el GM humano sigue al mando y puede pausarlo. */
+export interface IaSala {
+  perfil: PerfilGm;
+  pausada: boolean;
+  en_curso: Promise<void> | null;
+  ultima: number[]; // ids de eventos de su última intervención (para deshacer)
+}
 
 export const MAX_JUGADORES = 6;
 
@@ -65,6 +75,10 @@ export class Sala {
   private turno = 0;
   private ronda = 1;
   private cola: Promise<unknown> = Promise.resolve();
+  readonly diagrama: Diagrama;
+  private nodo: string | null;
+  private vars: Variables;
+  ia: IaSala | null = null;
 
   constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], tokenGm: string | null) {
     this.sesion = sesion;
@@ -72,6 +86,38 @@ export class Sala {
     this.personajes = new Map(personajes.map((p) => [p.id, p]));
     this.tokenGm = tokenGm;
     for (const p of personajes) this.pg.set(p.id, p.pg_actual);
+    this.diagrama = campana.diagrama ?? DIAGRAMA_VACIO;
+    this.nodo = nodoInicial(this.diagrama)?.id ?? null;
+    this.vars = { ...(campana.variables ?? {}) };
+  }
+
+  nodoActual() {
+    return this.nodo;
+  }
+
+  variables(): Variables {
+    return { ...this.vars };
+  }
+
+  cambiarNodo(id: string): Resultado {
+    if (!buscarNodo(this.diagrama, id)) return error('Ese nodo no existe en la campaña');
+    this.nodo = id;
+    return ok;
+  }
+
+  fijarVariable(nombre: string, valor: boolean | number | string): Resultado {
+    if (!Object.hasOwn(this.vars, nombre)) return error('Esa variable no existe');
+    this.vars = { ...this.vars, [nombre]: valor };
+    return ok;
+  }
+
+  hayGm() {
+    return this.gm !== null;
+  }
+
+  /** Mensaje solo para el GM humano (notas, gasto, nodo actual). */
+  enviarGm(mensaje: object) {
+    this.gm?.enviar(mensaje);
   }
 
   /** Ejecuta las tareas de la sala de a una, en orden de llegada, aunque sean asíncronas. */

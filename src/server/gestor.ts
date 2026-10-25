@@ -5,6 +5,9 @@ import { generarCodigo } from './codigo.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
+import { MesaIa } from './mesa-ia.ts';
+import type { GmIa } from '../ia/gm-ia.ts';
+import type { Perfiles } from '../ia/perfiles.ts';
 
 const INTENTOS_CODIGO = 10;
 const LARGO_HISTORIAL = 50;
@@ -18,6 +21,11 @@ export interface Conexion {
 
 type Registro = (mensaje: string, err?: unknown) => void;
 
+export interface OpcionesIa {
+  gm: GmIa | null; // null: sin API key, la IA queda desactivada
+  perfiles: Perfiles;
+}
+
 /** Error de uso que se le muestra al cliente tal cual. */
 class ErrorDeJuego extends Error {}
 
@@ -28,9 +36,25 @@ export class Gestor {
   private readonly repo: Repositorio;
   private readonly registro: Registro;
 
-  constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? '')) {
+  private readonly ia: MesaIa | null;
+
+  constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? ''), ia?: OpcionesIa) {
     this.repo = repo;
     this.registro = registro;
+    this.ia = ia
+      ? new MesaIa(ia.gm, ia.perfiles, {
+          repo,
+          registro,
+          publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
+          pedirTirada: (sala, autor, id, tirada, motivo, cd) => this.pedirTirada(sala, autor, id, tirada, motivo, cd),
+        })
+      : null;
+  }
+
+  /** Espera a que termine la intervención de IA en curso en esa sala (tests). */
+  async esperarIa(codigo: string) {
+    const sala = this.salas.get(codigo);
+    if (sala && this.ia) await this.ia.esperar(sala);
   }
 
   conectar(cliente: Cliente): Conexion {
@@ -71,11 +95,16 @@ export class Gestor {
   private async atender(m: MensajeCliente, cliente: Cliente, sala: Sala | null): Promise<Sala | void> {
     switch (m.tipo) {
       case 'ver_campanas':
-        cliente.enviar({ tipo: 'campanas', campanas: (await this.repo.listarCampanas()).map(({ id, nombre }) => ({ id, nombre })) });
+        cliente.enviar({
+          tipo: 'campanas',
+          campanas: (await this.repo.listarCampanas()).map(({ id, nombre }) => ({ id, nombre })),
+          perfiles: this.ia ? (await this.ia.perfiles.listar()).map(({ id, nombre, descripcion }) => ({ id, nombre, descripcion })) : [],
+          ia_disponible: this.ia?.disponible() ?? false,
+        });
         return;
       case 'crear_sesion':
         if (sala) throw new ErrorDeJuego('Ya estás en una sala');
-        return this.crearSesion(m.campana_id, cliente);
+        return this.crearSesion(m.campana_id, cliente, m.gm_perfil_id);
       case 'ver_personajes': {
         const s = await this.salaPorCodigo(m.codigo);
         s.incorporar(await this.repo.personajesDeCampana(s.campana.id));
@@ -98,9 +127,12 @@ export class Gestor {
     }
   }
 
-  private async crearSesion(campanaId: string, cliente: Cliente): Promise<Sala> {
+  private async crearSesion(campanaId: string, cliente: Cliente, perfilId?: string): Promise<Sala> {
     const campana = await this.repo.buscarCampana(campanaId);
     if (!campana) throw new ErrorDeJuego('No existe esa campaña');
+    if (perfilId && !this.ia) throw new ErrorDeJuego('La IA no está configurada en este servidor');
+    if (perfilId && !this.ia!.disponible()) throw new ErrorDeJuego('La IA está desactivada: falta ANTHROPIC_API_KEY en el servidor');
+    if (perfilId && !(await this.ia!.perfiles.buscar(perfilId))) throw new ErrorDeJuego('No existe ese perfil de GM');
     const personajes = await this.repo.personajesDeCampana(campana.id);
 
     for (let i = 0; i < INTENTOS_CODIGO; i++) {
@@ -109,8 +141,10 @@ export class Gestor {
       const token = randomBytes(16).toString('hex');
       const sala = new Sala(sesion, campana, personajes, token);
       sala.sentarGm(cliente, token);
+      if (perfilId) await this.ia!.activar(sala, perfilId);
       this.salas.set(sesion.codigo, sala);
       cliente.enviar({ tipo: 'sesion_creada', codigo: sesion.codigo, token_gm: token, estado: sala.estado() });
+      await this.ia?.enviarPanel(sala);
       return sala;
     }
     throw new Error('No se pudo generar un código de sala libre');
@@ -155,6 +189,7 @@ export class Gestor {
     if (!r.ok) throw new ErrorDeJuego(r.error);
     await this.bienvenida(sala, cliente, { rol: 'gm' });
     sala.difundir({ tipo: 'estado', estado: sala.estado() });
+    await this.ia?.enviarPanel(sala);
   }
 
   private async bienvenida(sala: Sala, cliente: Cliente, rol: Rol) {
@@ -174,7 +209,8 @@ export class Gestor {
       case 'accion':
         if (quien.rol !== 'jugador') throw new ErrorDeJuego('El GM narra con "narracion", no con "accion"');
         if (sala.turnoDe() !== quien.personaje_id) throw new ErrorDeJuego('No es tu turno');
-        return this.publicar(sala, 'accion', autor, { texto: m.texto, personaje_nombre: nombre });
+        await this.publicar(sala, 'accion', autor, { texto: m.texto, personaje_nombre: nombre });
+        return this.ia?.disparar(sala, `${nombre} (jugador) hace: ${m.texto}`);
       case 'narracion':
         soloGm(quien);
         return this.publicar(sala, 'mensaje', autor, { texto: m.texto, personaje_nombre: nombre });
@@ -186,31 +222,35 @@ export class Gestor {
         if (!peticion) throw new ErrorDeJuego('No tienes ninguna tirada pendiente: espera a que el GM te pida una');
         const r = tirar(peticion.notacion);
         const exito = peticion.cd === null ? null : r.total >= peticion.cd;
-        return this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre });
+        await this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre });
+        const resultado = exito === null ? '' : exito ? ` contra CD ${peticion.cd}: ÉXITO` : ` contra CD ${peticion.cd}: FRACASO`;
+        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.`);
       }
-      case 'pedir_tirada': {
+      case 'pedir_tirada':
         soloGm(quien);
-        const destino = sala.personaje(m.personaje_id);
-        if (!destino) throw new ErrorDeJuego('Ese personaje no está en la sala');
-        let notacion = m.notacion!;
-        let motivo = m.motivo ?? null;
-        if (m.chequeo) {
-          const t = tiradaDeChequeo(m.chequeo, destino.caracteristicas);
-          if (!t) throw new ErrorDeJuego('Habilidad o salvación desconocida');
-          notacion = t.notacion;
-          motivo = t.motivo;
-        }
-        tirar(notacion); // valida la notación antes de dejarla pendiente
-        const peticion = { notacion, motivo, cd: m.cd ?? null };
-        const r = sala.pedirTirada(m.personaje_id, peticion);
+        return this.pedirTirada(sala, autor, m.personaje_id, m, m.motivo ?? null, m.cd ?? null);
+      case 'narrar_escena':
+        soloGm(quien);
+        if (!sala.ia) throw new ErrorDeJuego('Esta sala no tiene GM IA');
+        if (sala.ia.pausada) throw new ErrorDeJuego('La IA está pausada');
+        return this.ia!.disparar(sala, 'El GM humano pide que narres la escena actual.');
+      case 'pausar_ia': {
+        soloGm(quien);
+        const error = this.ia?.pausar(sala, m.pausada) ?? 'Esta sala no tiene GM IA';
+        if (error) throw new ErrorDeJuego(error);
+        return this.publicar(sala, 'estado', autor, { cambio: 'ia_pausa', pausada: m.pausada, texto: m.pausada ? 'El GM pausó la IA.' : 'El GM reanudó la IA.' });
+      }
+      case 'deshacer_ia': {
+        soloGm(quien);
+        const ids = this.ia?.deshacer(sala) ?? [];
+        if (ids.length === 0) throw new ErrorDeJuego('No hay ninguna intervención de la IA para deshacer');
+        return this.publicar(sala, 'estado', autor, { cambio: 'deshacer_ia', eventos: ids, texto: 'El GM deshizo la última intervención de la IA.' });
+      }
+      case 'cambiar_nodo': {
+        soloGm(quien);
+        const r = sala.cambiarNodo(m.nodo_id);
         if (!r.ok) throw new ErrorDeJuego(r.error);
-        return this.publicar(sala, 'estado', autor, {
-          cambio: 'pedir_tirada',
-          personaje_id: m.personaje_id,
-          personaje_nombre: destino.nombre,
-          notacion: peticion.notacion,
-          motivo: peticion.motivo,
-        });
+        return this.publicar(sala, 'estado', autor, { cambio: 'nodo', nodo_id: m.nodo_id });
       }
       case 'aplicar_pg': {
         soloGm(quien);
@@ -243,6 +283,26 @@ export class Gestor {
     }
   }
 
+  /** Deja pendiente una tirada para un jugador (GM humano o IA). */
+  private async pedirTirada(
+    sala: Sala, autor: string, personajeId: string, tirada: { chequeo?: string; notacion?: string }, motivoPedido: string | null, cd: number | null,
+  ) {
+    const destino = sala.personaje(personajeId);
+    if (!destino) throw new ErrorDeJuego('Ese personaje no está en la sala');
+    let notacion = tirada.notacion ?? '';
+    let motivo = motivoPedido;
+    if (tirada.chequeo) {
+      const t = tiradaDeChequeo(tirada.chequeo, destino.caracteristicas);
+      if (!t) throw new ErrorDeJuego('Habilidad o salvación desconocida');
+      notacion = t.notacion;
+      motivo = t.motivo;
+    }
+    tirar(notacion); // valida la notación antes de dejarla pendiente
+    const r = sala.pedirTirada(personajeId, { notacion, motivo, cd });
+    if (!r.ok) throw new ErrorDeJuego(r.error);
+    await this.publicar(sala, 'estado', autor, { cambio: 'pedir_tirada', personaje_id: personajeId, personaje_nombre: destino.nombre, notacion, motivo });
+  }
+
   private async guardarPg(personajeId: string, pg: number) {
     try {
       await this.repo.guardarPg(personajeId, pg);
@@ -263,6 +323,8 @@ export class Gestor {
       evento = { ...nuevo, id: null, creado_en: new Date().toISOString() };
     }
     sala.difundir({ tipo: 'evento', evento, estado: sala.estado() });
+    await this.ia?.enviarPanel(sala);
+    return evento;
   }
 }
 
