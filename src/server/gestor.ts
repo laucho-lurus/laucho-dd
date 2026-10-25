@@ -7,6 +7,9 @@ import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
 import { MesaIa } from './mesa-ia.ts';
+import { intervencionVacia } from './sala.ts';
+import { SRD_MONSTRUOS, type Plantilla } from '../rules/monstruos.ts';
+import type { Objetivo } from '../ia/gm-ia.ts';
 import type { GmIa } from '../ia/gm-ia.ts';
 import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 
@@ -41,6 +44,7 @@ export class Gestor {
 
   private readonly ia: MesaIa | null;
   private readonly ultimoChat = new WeakMap<Cliente, number>();
+  private readonly criaturas = new Map<string, Promise<Plantilla[]>>(); // por campaña
 
   constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? ''), ia?: OpcionesIa) {
     this.repo = repo;
@@ -50,7 +54,9 @@ export class Gestor {
           repo,
           registro,
           publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
-          pedirTirada: (sala, autor, id, tirada, motivo, cd) => this.pedirTirada(sala, autor, id, tirada, motivo, cd),
+          pedirTirada: (sala, autor, id, tirada, motivo, cd, objetivo) => this.pedirTirada(sala, autor, id, tirada, motivo, cd, objetivo),
+          agregarMonstruos: (sala, autor, clave, n, extra) => this.agregarMonstruos(sala, autor, clave, n, extra),
+          criaturas: async (sala) => (await this.plantillas(sala)).map(({ srd_clave, nombre }) => ({ srd_clave, nombre })),
           guardarEstado: (sala) => this.guardarEstado(sala),
           aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
         }, ia.tiempo_maximo_ms)
@@ -183,6 +189,7 @@ export class Gestor {
     const personajes = await this.repo.personajesDeCampana(campana.id);
     // El token del GM vive solo en memoria: tras un reinicio el GM no puede retomar (ver README).
     const sala = new Sala(sesion, campana, personajes, null);
+    sala.cargarMonstruos(await this.repo.monstruosDeSesion(sesion.id));
     if (sesion.ia_perfil_id && this.ia?.disponible()) {
       const error = await this.ia.activar(sala, sesion.ia_perfil_id);
       if (error) this.registro(`[sala] no se pudo retomar el GM IA de ${codigo}: ${error}`);
@@ -251,8 +258,12 @@ export class Gestor {
         const exito = peticion.cd === null ? null : r.total >= peticion.cd;
         if (this.ia?.responderia(sala)) sala.ia_pensando = true;
         await this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre, texto: textoTirada(nombre, r, peticion.motivo, exito) });
-        const resultado = exito === null ? '' : exito ? ` contra CD ${peticion.cd}: ÉXITO` : ` contra CD ${peticion.cd}: FRACASO`;
-        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.`);
+        const objetivo = peticion.objetivo_monstruo ? sala.monstruo(peticion.objetivo_monstruo) : undefined;
+        const resultado = exito === null ? '' : peticion.efecto === 'ataque' && objetivo
+          ? ` contra la CA de ${objetivo.nombre}: ${exito ? 'ACIERTA' : 'FALLA'}`
+          : ` contra CD ${peticion.cd}: ${exito ? 'ÉXITO' : 'FRACASO'}`;
+        const dano = peticion.efecto === 'daño' && objetivo ? await this.danarMonstruo(sala, objetivo.id, r.total, peticion.de_ia === true) : '';
+        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.${dano ? ` ${dano}` : ''}`);
       }
       case 'pedir_tirada':
         soloGm(quien);
@@ -272,16 +283,40 @@ export class Gestor {
       case 'deshacer_ia': {
         soloGm(quien);
         const ultima = this.ia?.deshacer(sala);
-        if (!ultima || ultima.eventos.length + ultima.pg.length === 0) throw new ErrorDeJuego('No hay ninguna intervención de la IA para deshacer');
+        if (!ultima || intervencionVacia(ultima)) throw new ErrorDeJuego('No hay ninguna intervención de la IA para deshacer');
         for (const { personaje_id, delta } of [...ultima.pg].reverse()) {
           const r = sala.aplicarPg(personaje_id, -delta);
           if (r.ok) await this.guardarPg(personaje_id, r.pg);
         }
+        for (const { id, delta } of [...ultima.monstruos].reverse()) sala.pgMonstruo(id, -delta);
+        for (const id of ultima.agregados) sala.quitarMonstruo(id);
+        if (ultima.monstruos.length || ultima.agregados.length) await this.guardarMonstruos(sala);
         return this.publicar(sala, 'estado', autor, {
           cambio: 'deshacer_ia',
           eventos: ultima.eventos,
           texto: `El GM deshizo la última intervención de la IA${ultima.pg.length ? ' (PG restaurados)' : ''}.`,
         });
+      }
+      case 'agregar_monstruos':
+        soloGm(quien);
+        await this.agregarMonstruos(sala, autor, m.srd_clave, m.cantidad, {});
+        return;
+      case 'quitar_monstruo': {
+        soloGm(quien);
+        const monstruo = sala.monstruo(m.monstruo_id);
+        const r = sala.quitarMonstruo(m.monstruo_id);
+        if (!r.ok) throw new ErrorDeJuego(r.error);
+        await this.guardarMonstruos(sala);
+        return this.publicar(sala, 'estado', autor, { cambio: 'monstruos', texto: `${monstruo!.nombre} sale del encuentro.` });
+      }
+      case 'monstruo_pg': {
+        soloGm(quien);
+        if (!sala.monstruo(m.monstruo_id)) throw new ErrorDeJuego('Ese monstruo no está en la mesa');
+        if (m.cantidad < 0) return void (await this.danarMonstruo(sala, m.monstruo_id, -m.cantidad, false));
+        const r = sala.pgMonstruo(m.monstruo_id, m.cantidad);
+        if (!r.ok) throw new ErrorDeJuego(r.error);
+        await this.guardarMonstruos(sala);
+        return this.publicar(sala, 'estado', autor, { cambio: 'monstruos', texto: `${r.monstruo.nombre} se recupera.` });
       }
       case 'ia_permitir_pg': {
         soloGm(quien);
@@ -318,6 +353,50 @@ export class Gestor {
     }
   }
 
+  /** Criaturas de la campaña (tabla criaturas) más el SRD local para las que falten. */
+  private plantillas(sala: Sala): Promise<Plantilla[]> {
+    let p = this.criaturas.get(sala.campana.id);
+    if (!p) {
+      p = this.repo.criaturasDeCampana(sala.campana.id).then((propias) => {
+        const claves = new Set(propias.map((c) => c.srd_clave));
+        return [...propias, ...Object.values(SRD_MONSTRUOS).filter((c) => !claves.has(c.srd_clave))];
+      });
+      p.catch(() => this.criaturas.delete(sala.campana.id)); // reintenta si falló la base
+      this.criaturas.set(sala.campana.id, p);
+    }
+    return p;
+  }
+
+  private async agregarMonstruos(sala: Sala, autor: string, clave: string, cantidad: number, extra: Record<string, unknown>) {
+    const plantilla = (await this.plantillas(sala)).find((c) => c.srd_clave === clave);
+    if (!plantilla) throw new ErrorDeJuego('Esa criatura no está disponible');
+    const r = sala.agregarMonstruos(plantilla, cantidad);
+    if (!r.ok) throw new ErrorDeJuego(r.error);
+    await this.guardarMonstruos(sala);
+    const evento = await this.publicar(sala, 'estado', autor, { ...extra, cambio: 'monstruos', texto: `Entran: ${r.nuevos.map((x) => x.nombre).join(', ')}.` });
+    return { evento, nuevos: r.nuevos };
+  }
+
+  /** Resta PG a un monstruo, lo anuncia y, si la tirada la pidió la IA, lo apunta para deshacer. */
+  private async danarMonstruo(sala: Sala, id: string, cantidad: number, deIa: boolean): Promise<string> {
+    const r = sala.pgMonstruo(id, -cantidad);
+    if (!r.ok) return '';
+    await this.guardarMonstruos(sala);
+    const cae = r.monstruo.pg_actual === 0;
+    const texto = cae ? `${r.monstruo.nombre} cae.` : `${r.monstruo.nombre} recibe ${-r.delta} de daño.`;
+    const evento = await this.publicar(sala, 'estado', 'sistema', { cambio: 'monstruos', texto });
+    if (deIa) sala.anotarIntervencion({ monstruos: [{ id, delta: r.delta }], eventos: evento.id === null ? [] : [evento.id] }, this.ia?.responderia(sala) ?? false);
+    return `${texto} (${r.monstruo.nombre}: ${r.monstruo.pg_actual}/${r.monstruo.pg_max} PG)`;
+  }
+
+  private async guardarMonstruos(sala: Sala) {
+    try {
+      await this.repo.guardarMonstruos(sala.sesion.id, sala.listaMonstruos());
+    } catch (err) {
+      this.registro('[sala] no se pudieron guardar los monstruos:', err); // la memoria manda
+    }
+  }
+
   /** Aplica daño/curación (GM humano o IA), guarda los PG y publica el evento. */
   private async aplicarPg(sala: Sala, autor: string, personajeId: string, cantidad: number, extra: Record<string, unknown>) {
     const antes = sala.pgDe(personajeId);
@@ -339,6 +418,7 @@ export class Gestor {
   /** Deja pendiente una tirada para un jugador (GM humano o IA). */
   private async pedirTirada(
     sala: Sala, autor: string, personajeId: string, tirada: { chequeo?: string; notacion?: string }, motivoPedido: string | null, cd: number | null,
+    objetivo: Objetivo = { objetivo_monstruo: null, efecto: null },
   ) {
     const destino = sala.personaje(personajeId);
     if (!destino) throw new ErrorDeJuego('Ese personaje no está en la sala');
@@ -352,7 +432,13 @@ export class Gestor {
     }
     tirar(notacion); // valida la notación antes de dejarla pendiente
     const proposito = motivo?.trim() || motivoPorDefecto(notacion); // nunca sin propósito
-    const r = sala.pedirTirada(personajeId, { notacion, motivo: proposito, cd });
+    const monstruo = objetivo.objetivo_monstruo ? sala.monstruo(objetivo.objetivo_monstruo) : undefined;
+    if (objetivo.objetivo_monstruo && !monstruo) throw new ErrorDeJuego('Ese monstruo no está en la mesa');
+    // Contra un monstruo, la CD del ataque es su CA (secreta para los jugadores).
+    const cdFinal = objetivo.efecto === 'ataque' && monstruo ? monstruo.ca : cd;
+    const r = sala.pedirTirada(personajeId, {
+      notacion, motivo: proposito, cd: cdFinal, objetivo_monstruo: monstruo?.id ?? null, efecto: monstruo ? objetivo.efecto : null, de_ia: autor === 'gm_ia',
+    });
     if (!r.ok) throw new ErrorDeJuego(r.error);
     await this.publicar(sala, 'estado', autor, {
       cambio: 'pedir_tirada',

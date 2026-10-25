@@ -169,3 +169,16 @@ input, select, textarea {
 @media (max-width: 760px) { .lateral { min-height: 320px; } }
 .que-sigue { background: var(--madera-clara); border-left: 4px solid var(--oro); border-radius: 4px; padding: 6px 10px; font-family: 'Cinzel', serif; font-size: .9rem; color: var(--oro); }
 .que-sigue:empty { display: none; }
+
+/* Enemigos */
+.fila-retratos { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.enemigos:empty { display: none; }
+.enemigos { border-left: 1px solid var(--borde); padding-left: 16px; }
+.enemigo .circulo { border-color: #7a3b2e; color: #e0a090; }
+.enemigo.caido { opacity: .35; }
+.enemigo .estado-monstruo { font-size: .7rem; color: var(--tenue); }
+.gm-monstruos { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.gm-monstruo { display: flex; align-items: center; gap: 4px; background: var(--madera-clara); border-radius: 4px; padding: 2px 6px; font-size: .8rem; }
+.gm-monstruo button { padding: 1px 6px; font-size: .75rem; }
+.gm-monstruo input { width: 40px; padding: 1px; font-size: .75rem; }
+#criatura-cantidad { width: 56px; }

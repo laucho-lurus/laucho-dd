@@ -317,3 +317,83 @@ test('"Qué sigue" recorre acción → IA pensando → tirada pendiente → resu
   await humano.enviar({ tipo: 'pausar_ia', pausada: true });
   assert.equal(jugador.ultimo().estado.que_sigue, 'IA pausada: el GM humano decide');
 });
+
+test('monstruos: la IA los saca, el ataque usa su CA y el daño baja sus PG hasta caer', async () => {
+  const { gestor, humano, jugador, codigo, llamadas } = await mesa([
+    respuesta([usar('agregar_monstruos', { srd_clave: 'kobold', cantidad: 2 }), usar('narrar', { texto: 'Dos kobolds.' })], 'end_turn'),
+    // acción 1 → ataque que no llega (1d4 < CA 12) → narra el fallo
+    respuesta([usar('pedir_tirada', { jugador: BRISA, tirada: '1d4', motivo: 'Ataque con estoque al Kobold 1', objetivo_monstruo: 'm1', efecto: 'ataque' })]),
+    respuesta([usar('narrar', { texto: 'Fallas.' })], 'end_turn'),
+    // acción 2 → ataque que acierta → pide el daño → narra la caída
+    respuesta([usar('pedir_tirada', { jugador: BRISA, tirada: '1d4+100', motivo: 'Ataque con estoque al Kobold 1', objetivo_monstruo: 'm1', efecto: 'ataque' })]),
+    respuesta([usar('pedir_tirada', { jugador: BRISA, tirada: '1d4+100', motivo: 'Daño del estoque al Kobold 1', objetivo_monstruo: 'm1', efecto: 'daño' })]),
+    respuesta([usar('narrar', { texto: 'Cae.' })], 'end_turn'),
+  ]);
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  assert.deepEqual(jugador.ultimo().estado.monstruos, [
+    { id: 'm1', nombre: 'Kobold 1', estado: 'sano' },
+    { id: 'm2', nombre: 'Kobold 2', estado: 'sano' },
+  ]);
+  const panel = humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!;
+  assert.deepEqual(panel.monstruos.map((m: Msj) => [m.nombre, m.pg_actual, m.ca]), [['Kobold 1', 5, 12], ['Kobold 2', 5, 12]]);
+
+  // Ataque que no llega a la CA 12 (1d4 ≤ 4) y uno que sí (≥ 101).
+  for (const esperado of ['FALLA', 'ACIERTA']) {
+    await jugador.enviar({ tipo: 'accion', texto: 'Ataco al kobold' });
+    await gestor.esperarIa(codigo);
+    assert.ok(!JSON.stringify(jugador.ultimo().estado).includes('"cd"'));
+    await jugador.enviar({ tipo: 'tirar', notacion: '1d20' });
+    await gestor.esperarIa(codigo);
+    assert.match(llamadas.at(-1)!.messages[0].content as string, new RegExp(`contra la CA de Kobold 1: ${esperado}`));
+  }
+  // La IA pidió el daño: el servidor lo resta solo.
+  await jugador.enviar({ tipo: 'tirar', notacion: '1d8' });
+  await gestor.esperarIa(codigo);
+  assert.equal(eventos(jugador).findLast((e) => e.datos.cambio === 'monstruos').datos.texto, 'Kobold 1 cae.');
+  assert.equal(jugador.ultimo().estado.monstruos[0].estado, 'caído');
+  assert.ok(!JSON.stringify(jugador.ultimo().estado.monstruos).match(/pg|ca"/i)); // sin cifras para jugadores
+  assert.match(llamadas.at(-1)!.messages[0].content as string, /Kobold 1 cae\. \(Kobold 1: 0\/5 PG\)/);
+
+  // Deshacer IA revierte el daño de la tirada que pidió.
+  await humano.enviar({ tipo: 'deshacer_ia' });
+  assert.equal(humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!.monstruos[0].pg_actual, 5);
+});
+
+test('monstruos: máximo 6 vivos, el GM humano los maneja y deshacer quita los que sacó la IA', async () => {
+  const { gestor, humano, codigo, llamadas } = await mesa([
+    respuesta([usar('agregar_monstruos', { srd_clave: 'goblin', cantidad: 3 })]),
+    respuesta([usar('narrar', { texto: 'Goblins.' })], 'end_turn'),
+  ]);
+  await humano.enviar({ tipo: 'agregar_monstruos', srd_clave: 'kobold', cantidad: 4 });
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  const resultado = (llamadas[1].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[])[0].content;
+  assert.match(String(resultado), /Máximo 6 monstruos vivos/);
+
+  await humano.enviar({ tipo: 'monstruo_pg', monstruo_id: 'm2', cantidad: -3 });
+  const panel = () => humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!;
+  assert.equal(panel().monstruos[1].pg_actual, 2);
+  await humano.enviar({ tipo: 'quitar_monstruo', monstruo_id: 'm4' });
+  assert.equal(panel().monstruos.length, 3);
+  await humano.enviar({ tipo: 'agregar_monstruos', srd_clave: 'dragon', cantidad: 1 });
+  assert.match(humano.ultimo().mensaje, /no está disponible/);
+});
+
+test('monstruos: se guardan y vuelven tras reiniciar', async () => {
+  const repo = new RepositorioMemoria(DATOS_DEMO);
+  const dir = mkdtempSync(join(tmpdir(), 'monstruos-'));
+  const opciones = () => ({ gm: null, perfiles: new Perfiles(join(dir, 'p.json')) });
+  const g1 = new Gestor(repo, () => {}, opciones());
+  const r1: Msj[] = [];
+  const gm = g1.conectar({ enviar: (m) => r1.push(m as Msj) });
+  await gm.recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID }));
+  const codigo = r1.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  await gm.recibir(JSON.stringify({ tipo: 'agregar_monstruos', srd_clave: 'wolf', cantidad: 1 }));
+  await gm.recibir(JSON.stringify({ tipo: 'monstruo_pg', monstruo_id: 'm1', cantidad: -8 }));
+
+  const g2 = new Gestor(repo, () => {}, opciones());
+  const r2: Msj[] = [];
+  await g2.conectar({ enviar: (m) => r2.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
+  assert.deepEqual(r2.find((m) => m.tipo === 'bienvenida')!.estado.monstruos, [{ id: 'm1', nombre: 'Lobo 1', estado: 'malherido' }]);
+});

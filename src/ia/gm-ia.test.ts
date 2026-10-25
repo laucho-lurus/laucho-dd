@@ -24,6 +24,8 @@ const contexto = (): Contexto => ({
   jugadores: [jugador],
   eventos: [],
   permitir_pg: true,
+  monstruos: [],
+  criaturas: [{ srd_clave: 'kobold', nombre: 'Kobold' }],
 });
 
 const uso = { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
@@ -49,7 +51,8 @@ function accionesFalsas() {
   const hechas: string[] = [];
   const acciones: Acciones = {
     narrar: async (t) => (hechas.push(`narrar:${t}`), 'publicado'),
-    pedirTirada: async (j, t, cd, m) => (hechas.push(`tirada:${j}:${t}:${cd}:${m}`), 'tirada pedida'),
+    pedirTirada: async (j, t, cd, m, o) => (hechas.push(`tirada:${j}:${t}:${cd}:${m}${o.objetivo_monstruo ? `:${o.objetivo_monstruo}:${o.efecto}` : ''}`), 'tirada pedida'),
+    agregarMonstruos: async (k, n) => (hechas.push(`monstruos:${k}:${n}`), 'ok'),
     avanzarNodo: async (n) => (hechas.push(`nodo:${n}`), 'ok'),
     fijarVariable: async (n, v) => (hechas.push(`var:${n}=${v}`), 'ok'),
     aplicarPg: async (p, n, m) => (hechas.push(`pg:${p}:${n}:${m}`), 'ok'),

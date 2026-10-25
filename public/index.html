@@ -41,7 +41,10 @@
 <div id="mesa" class="mesa" hidden>
   <header class="cabecera">
     <div class="sala"><span id="titulo-campana"></span> · Sala <strong id="codigo-sala"></strong> · Ronda <span id="ronda"></span></div>
-    <div id="retratos" class="retratos"></div>
+    <div class="fila-retratos">
+      <div id="retratos" class="retratos"></div>
+      <div id="enemigos" class="retratos enemigos" aria-label="Enemigos"></div>
+    </div>
     <details class="como-se-juega">
       <summary>Cómo se juega</summary>
       <ol>
@@ -86,6 +89,12 @@
       <div class="fila">
         <label>Nodo <select id="nodo"></select></label>
         <small id="notas-nodo" class="notas-nodo"></small>
+      </div>
+      <div id="gm-monstruos" class="gm-monstruos"></div>
+      <div class="fila">
+        <label>Enemigos <select id="criatura"></select></label>
+        <input id="criatura-cantidad" type="number" min="1" max="6" value="1" aria-label="Cantidad">
+        <button id="agregar-monstruos" class="secundario">Agregar</button>
       </div>
       <small id="avisos-base" class="avisos-base" hidden></small>
     </div>

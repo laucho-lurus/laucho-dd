@@ -1,6 +1,7 @@
 import type { Arma, Campana, Caracteristicas, EstadoSesion, Personaje, Sesion } from './repositorio.ts';
 import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
 import type { PerfilGm } from '../ia/perfiles.ts';
+import { MAX_MONSTRUOS_VIVOS, monstruoPublico, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 
 /** GM IA de la sala: el GM humano sigue al mando y puede pausarlo. */
 export interface IaSala {
@@ -8,14 +9,26 @@ export interface IaSala {
   pausada: boolean;
   puede_pg: boolean; // casilla del GM: la IA puede aplicar daño/curación
   ultima: IntervencionIa; // lo que hizo en su última intervención (para deshacer)
+  arrastre: IntervencionIa; // consecuencias que se suman a la próxima intervención (que las narra)
 }
 
 export interface IntervencionIa {
   eventos: number[];
   pg: { personaje_id: string; delta: number }[]; // cambios reales de PG (ya recortados a 0 y al máximo)
+  monstruos: { id: string; delta: number }[]; // daño a monstruos de tiradas que pidió la IA
+  agregados: string[]; // monstruos que sacó la IA
 }
 
-export const SIN_INTERVENCION: IntervencionIa = { eventos: [], pg: [] };
+export const SIN_INTERVENCION: IntervencionIa = { eventos: [], pg: [], monstruos: [], agregados: [] };
+
+export const unirIntervenciones = (a: IntervencionIa, b: Partial<IntervencionIa>): IntervencionIa => ({
+  eventos: [...a.eventos, ...(b.eventos ?? [])],
+  pg: [...a.pg, ...(b.pg ?? [])],
+  monstruos: [...a.monstruos, ...(b.monstruos ?? [])],
+  agregados: [...a.agregados, ...(b.agregados ?? [])],
+});
+
+export const intervencionVacia = (i: IntervencionIa) => i.eventos.length + i.pg.length + i.monstruos.length + i.agregados.length === 0;
 
 export const MAX_JUGADORES = 6;
 
@@ -52,6 +65,7 @@ export interface EstadoSala {
   turno_de: string | null;
   ronda: number;
   max_jugadores: number;
+  monstruos: ReturnType<typeof monstruoPublico>[]; // sin cifras: los PG exactos solo los ve el GM
   que_sigue: string; // franja "Qué sigue", calculada sin IA
 }
 
@@ -60,6 +74,9 @@ export interface Peticion {
   notacion: string;
   motivo: string | null;
   cd: number | null;
+  objetivo_monstruo?: string | null;
+  efecto?: 'ataque' | 'daño' | null;
+  de_ia?: boolean;
 }
 
 type Resultado = { ok: true } | { ok: false; error: string };
@@ -88,6 +105,8 @@ export class Sala {
   private vars: Variables;
   ia: IaSala | null = null;
   ia_pensando = false;
+  private monstruos: Monstruo[] = [];
+  private proximoMonstruo = 1;
 
   constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], tokenGm: string | null) {
     this.sesion = sesion;
@@ -281,8 +300,70 @@ export class Sala {
       turno_de: this.turnoDe(),
       ronda: this.ronda,
       max_jugadores: MAX_JUGADORES,
+      monstruos: this.monstruos.map(monstruoPublico),
       que_sigue: this.queSigue(),
     };
+  }
+
+  /** Restaura los monstruos guardados (servidor reiniciado). */
+  cargarMonstruos(monstruos: Monstruo[]) {
+    this.monstruos = monstruos.map((m) => ({ ...m }));
+    const numeros = monstruos.map((m) => Number(m.id.slice(1))).filter(Number.isFinite);
+    this.proximoMonstruo = Math.max(0, ...numeros) + 1;
+  }
+
+  listaMonstruos(): Monstruo[] {
+    return this.monstruos.map((m) => ({ ...m }));
+  }
+
+  monstruo(id: string): Monstruo | undefined {
+    return this.monstruos.find((m) => m.id === id);
+  }
+
+  /** Saca `cantidad` monstruos de la plantilla, numerados ("Kobold 1", "Kobold 2"…). Máx. 6 vivos. */
+  agregarMonstruos(p: Plantilla, cantidad: number): { ok: true; nuevos: Monstruo[] } | { ok: false; error: string } {
+    const vivos = this.monstruos.filter((m) => m.pg_actual > 0).length;
+    if (vivos + cantidad > MAX_MONSTRUOS_VIVOS) return { ok: false, error: `Máximo ${MAX_MONSTRUOS_VIVOS} monstruos vivos a la vez (ya hay ${vivos})` };
+    const usados = this.monstruos.filter((m) => m.nombre.startsWith(`${p.nombre} `)).map((m) => Number(m.nombre.slice(p.nombre.length + 1)) || 0);
+    let n = Math.max(0, ...usados);
+    const nuevos = Array.from({ length: cantidad }, (): Monstruo => ({
+      id: `m${this.proximoMonstruo++}`,
+      nombre: `${p.nombre} ${++n}`,
+      srd_clave: p.srd_clave,
+      ca: p.ca,
+      pg_max: p.pg,
+      pg_actual: p.pg,
+      ataques: p.ataques,
+    }));
+    this.monstruos = [...this.monstruos, ...nuevos];
+    return { ok: true, nuevos };
+  }
+
+  quitarMonstruo(id: string): Resultado {
+    if (!this.monstruo(id)) return error('Ese monstruo no está en la mesa');
+    this.monstruos = this.monstruos.filter((m) => m.id !== id);
+    return ok;
+  }
+
+  /** Suma o resta PG a un monstruo entre 0 y su máximo. Devuelve el cambio real. */
+  pgMonstruo(id: string, cantidad: number): { ok: true; monstruo: Monstruo; delta: number } | { ok: false; error: string } {
+    const m = this.monstruo(id);
+    if (!m) return { ok: false, error: 'Ese monstruo no está en la mesa' };
+    const pg = Math.max(0, Math.min(m.pg_max, m.pg_actual + cantidad));
+    const actualizado = { ...m, pg_actual: pg };
+    this.monstruos = this.monstruos.map((x) => (x.id === id ? actualizado : x));
+    return { ok: true, monstruo: actualizado, delta: pg - m.pg_actual };
+  }
+
+  /**
+   * Apunta algo que se resolvió después de una intervención de la IA (p. ej. el daño de la tirada que pidió).
+   * Si la IA va a narrarlo, va a esa próxima intervención; si no, a la última.
+   */
+  anotarIntervencion(extra: Partial<IntervencionIa>, enLaProxima: boolean) {
+    if (!this.ia) return;
+    this.ia = enLaProxima
+      ? { ...this.ia, arrastre: unirIntervenciones(this.ia.arrastre, extra) }
+      : { ...this.ia, ultima: unirIntervenciones(this.ia.ultima, extra) };
   }
 
   /** Qué toca ahora, en orden de prioridad: tirada pendiente, IA, turno de un jugador o el GM. */

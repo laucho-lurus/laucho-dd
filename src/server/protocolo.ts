@@ -20,6 +20,9 @@ export type MensajeCliente =
   | { tipo: 'narrar_escena' }
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
+  | { tipo: 'agregar_monstruos'; srd_clave: string; cantidad: number }
+  | { tipo: 'quitar_monstruo'; monstruo_id: string }
+  | { tipo: 'monstruo_pg'; monstruo_id: string; cantidad: number }
   | { tipo: 'chat'; texto: string; en_personaje: boolean }
   | { tipo: 'ia_permitir_pg'; permitido: boolean }
   | { tipo: 'cambiar_nodo'; nodo_id: string }
@@ -141,6 +144,22 @@ export function validarMensaje(crudo: string): Validacion {
     case 'pausar_ia':
       if (typeof m.pausada !== 'boolean') return falla('"pausada" debe ser true o false');
       return bien({ tipo: 'pausar_ia', pausada: m.pausada });
+    case 'agregar_monstruos': {
+      const srd_clave = texto(m, 'srd_clave', MAX_ID);
+      if (esError(srd_clave)) return falla(srd_clave.error);
+      const cantidad = entero(m, 'cantidad', 1, 6);
+      if (esError(cantidad) || cantidad === undefined) return falla('"cantidad" debe ser un entero entre 1 y 6');
+      return bien({ tipo: 'agregar_monstruos', srd_clave, cantidad });
+    }
+    case 'quitar_monstruo':
+    case 'monstruo_pg': {
+      const monstruo_id = texto(m, 'monstruo_id', MAX_ID);
+      if (esError(monstruo_id)) return falla(monstruo_id.error);
+      if (m.tipo === 'quitar_monstruo') return bien({ tipo: 'quitar_monstruo', monstruo_id });
+      const cantidad = entero(m, 'cantidad', -MAX_PG_CAMBIO, MAX_PG_CAMBIO);
+      if (esError(cantidad) || !cantidad) return falla('"cantidad" debe ser un entero distinto de 0');
+      return bien({ tipo: 'monstruo_pg', monstruo_id, cantidad });
+    }
     case 'chat': {
       const t = texto(m, 'texto', MAX_CHAT);
       if (esError(t)) return falla(t.error);

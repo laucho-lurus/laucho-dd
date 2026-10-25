@@ -3,6 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { buscarNodo, salidas, type Diagrama, type Variables } from '../rules/aventura.ts';
 import { esChequeo, HABILIDADES } from '../rules/habilidades.ts';
 import { MIN_MOTIVO, motivoPorDefecto, motivoValido } from '../rules/tiradas.ts';
+import { estadoMonstruo, MAX_MONSTRUOS_VIVOS, type Monstruo } from '../rules/monstruos.ts';
 import type { EstadoJugador } from '../server/sala.ts';
 import type { Evento } from '../server/repositorio.ts';
 import { costo, MODELO_POR_DEFECTO } from './precios.ts';
@@ -27,12 +28,21 @@ export interface Contexto {
   jugadores: EstadoJugador[];
   eventos: Evento[];
   permitir_pg: boolean; // casilla del GM humano
+  monstruos: Monstruo[];
+  criaturas: { srd_clave: string; nombre: string }[]; // las que se pueden sacar
+}
+
+/** Para qué sirve una tirada pedida contra un monstruo. */
+export interface Objetivo {
+  objetivo_monstruo: string | null;
+  efecto: 'ataque' | 'daño' | null;
 }
 
 /** Acciones sobre la sala. Devuelven el texto que verá el modelo como resultado. */
 export interface Acciones {
   narrar(texto: string): Promise<string>;
-  pedirTirada(personajeId: string, tirada: string, cd: number | null, motivo: string | null): Promise<string>;
+  pedirTirada(personajeId: string, tirada: string, cd: number | null, motivo: string | null, objetivo: Objetivo): Promise<string>;
+  agregarMonstruos(srdClave: string, cantidad: number): Promise<string>;
   avanzarNodo(nodoId: string): Promise<string>;
   fijarVariable(nombre: string, valor: boolean | number | string): Promise<string>;
   aplicarPg(personajeId: string, cantidad: number, motivo: string): Promise<string>;
@@ -45,7 +55,8 @@ Reglas que siempre cumples:
 - Respondes siempre en español.
 - Narras con la herramienta "narrar", en máximo ~120 palabras por intervención.
 - Nunca inventas resultados de dados ni daño. Si una acción tiene un resultado incierto, pide una tirada con "pedir_tirada" y espera su resultado; no la resuelves tú.
-- Daño y curación: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
+- Monstruos: sácalos con "agregar_monstruos". Para que un personaje los ataque, usa "pedir_tirada" con objetivo_monstruo y efecto "ataque" (el servidor usa su CA y te dirá si acierta); si acierta, pide el daño con efecto "daño" y el servidor restará sus PG y te dirá si cae. Nunca inventes ni cambies los PG de un monstruo.
+- Daño y curación a personajes: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
 - Solo avanzas a las salidas listadas del nodo actual ("avanzar_nodo") y solo cambias variables que ya existen ("fijar_variable").
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
 - Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.
@@ -70,8 +81,19 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
         tirada: { type: 'string' },
         cd: { type: 'integer', minimum: 1, maximum: 40 },
         motivo: { type: 'string', minLength: MIN_MOTIVO, description: 'Para qué es la tirada, concreto (mín. 8 caracteres)' },
+        objetivo_monstruo: { type: 'string', description: 'id del monstruo (p. ej. "m2") si la tirada es contra él' },
+        efecto: { type: 'string', enum: ['ataque', 'daño'], description: '"ataque": el servidor usa la CA del monstruo como CD. "daño": el servidor resta el total a sus PG.' },
       },
       required: ['jugador', 'tirada', 'motivo'],
+    },
+  },
+  {
+    name: 'agregar_monstruos',
+    description: `Saca monstruos al encuentro (máx. ${MAX_MONSTRUOS_VIVOS} vivos a la vez). Sus PG los lleva el servidor.`,
+    input_schema: {
+      type: 'object',
+      properties: { srd_clave: { type: 'string' }, cantidad: { type: 'integer', minimum: 1, maximum: MAX_MONSTRUOS_VIVOS } },
+      required: ['srd_clave', 'cantidad'],
     },
   },
   {
@@ -148,6 +170,10 @@ Variables: ${JSON.stringify(c.variables)}
 Personajes en la mesa:
 ${fichas.join('\n') || '- nadie'}
 
+Monstruos (los PG exactos son secretos; a los jugadores descríbeles solo su estado):
+${c.monstruos.map((m) => `- ${m.nombre} (id ${m.id}): ${estadoMonstruo(m)}, PG ${m.pg_actual}/${m.pg_max}, CA ${m.ca}, ataques: ${m.ataques.map((a) => `${a.nombre} ${a.ataque} ${a.dano}`).join('; ') || '—'}`).join('\n') || '- ninguno'}
+Criaturas que puedes sacar (srd_clave): ${c.criaturas.map((x) => `${x.srd_clave} (${x.nombre})`).join(', ') || '—'}
+
 Habilidades válidas para pedir_tirada: ${Object.keys(HABILIDADES).join(', ')}, salvacion_fue/des/con/int/sab/car.
 
 Últimos eventos:
@@ -190,7 +216,23 @@ async function ejecutar(
         }
         motivo = motivoPorDefecto(e.tirada); // segundo intento fallido: no bloqueamos la partida
       }
-      return { texto: await acciones.pedirTirada(e.jugador as string, e.tirada, cd, motivo), error: false };
+      const efecto = e.efecto === 'ataque' || e.efecto === 'daño' ? e.efecto : null;
+      const objetivo = typeof e.objetivo_monstruo === 'string' && e.objetivo_monstruo ? e.objetivo_monstruo : null;
+      if (objetivo) {
+        const m = c.monstruos.find((x) => x.id === objetivo);
+        if (!m) return falla(`Ese monstruo no existe. Monstruos: ${c.monstruos.map((x) => x.id).join(', ') || 'ninguno'}`);
+        if (m.pg_actual <= 0) return falla(`${m.nombre} ya cayó`);
+        if (!efecto) return falla('Con objetivo_monstruo indica efecto "ataque" o "daño"');
+      }
+      return { texto: await acciones.pedirTirada(e.jugador as string, e.tirada, cd, motivo, { objetivo_monstruo: objetivo, efecto: objetivo ? efecto : null }), error: false };
+    }
+    case 'agregar_monstruos': {
+      const n = e.cantidad;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_MONSTRUOS_VIVOS) return falla(`La cantidad va de 1 a ${MAX_MONSTRUOS_VIVOS}`);
+      if (typeof e.srd_clave !== 'string' || !c.criaturas.some((x) => x.srd_clave === e.srd_clave)) {
+        return falla(`Criatura desconocida. Disponibles: ${c.criaturas.map((x) => x.srd_clave).join(', ')}`);
+      }
+      return { texto: await acciones.agregarMonstruos(e.srd_clave, n), error: false };
     }
     case 'aplicar_pg': {
       if (!c.permitir_pg) return falla('El GM humano desactivó que apliques daño o curación; propónlo en la narración');

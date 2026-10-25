@@ -1,6 +1,6 @@
 // Mesa narrativa: entrada a la sala y juego.
 import { conectar } from './conexion.js';
-import { agregarEvento, pintarFicha, pintarRetratos } from './vista.js';
+import { agregarEvento, pintarEnemigos, pintarFicha, pintarRetratos } from './vista.js';
 import { detenerGiro, empezarGiro, mostrarResultado } from './dados.js';
 import { agregarChat, iniciarChat } from './chat.js';
 
@@ -80,6 +80,7 @@ function entrar(rol, nuevoEstado, historial) {
 function actualizar(nuevoEstado) {
   estado = nuevoEstado;
   $('que-sigue').textContent = estado.que_sigue ?? '';
+  pintarEnemigos(estado.monstruos);
   const esGm = miRol?.rol === 'gm';
   pintarRetratos(estado, esGm ? (personaje_id, cantidad) => servidor.enviar({ tipo: 'aplicar_pg', personaje_id, cantidad }) : null);
   if (esGm) actualizarSelectorPedir();
@@ -125,6 +126,10 @@ function pintarPanel(p) {
     $('deshacer-ia').disabled = !ia.puede_deshacer;
     $('ia-pg').checked = ia.puede_pg;
   }
+  pintarMonstruosGm(p.monstruos ?? []);
+  const elegida = $('criatura').value;
+  $('criatura').replaceChildren(...(p.criaturas ?? []).map((c) => new Option(c.nombre, c.srd_clave)));
+  if (elegida) $('criatura').value = elegida;
   $('avisos-base').hidden = !p.avisos?.length;
   $('avisos-base').textContent = (p.avisos ?? []).join(' · ');
   $('nodo').replaceChildren(...p.nodos.map((n) => new Option(`${n.id}. ${n.titulo}`, n.id)));
@@ -132,6 +137,33 @@ function pintarPanel(p) {
   $('notas-nodo').textContent = p.nodo ? `Notas: ${p.nodo.notas || '—'} · Salidas: ${p.salidas.map((s) => `${s.hasta} (${s.etiqueta})`).join(', ') || 'ninguna'}` : '';
 }
 
+/** Solo el GM ve los PG exactos de los monstruos y puede tocarlos. */
+function pintarMonstruosGm(monstruos) {
+  $('gm-monstruos').replaceChildren(...monstruos.map((m) => {
+    const caja = document.createElement('span');
+    caja.className = 'gm-monstruo';
+    const cantidad = Object.assign(document.createElement('input'), { type: 'number', min: 1, value: 1 });
+    cantidad.setAttribute('aria-label', `Cantidad para ${m.nombre}`);
+    const boton = (texto, titulo, alHacer) => {
+      const b = Object.assign(document.createElement('button'), { textContent: texto, title: titulo, className: 'secundario' });
+      b.addEventListener('click', alHacer);
+      return b;
+    };
+    const pg = (signo) => () => {
+      const n = Math.abs(parseInt(cantidad.value, 10));
+      if (n) servidor.enviar({ tipo: 'monstruo_pg', monstruo_id: m.id, cantidad: signo * n });
+    };
+    caja.append(
+      `${m.nombre} ${m.pg_actual}/${m.pg_max} PG · CA ${m.ca}`,
+      boton('−', 'Daño', pg(-1)), cantidad, boton('+', 'Curación', pg(1)),
+      boton('✕', 'Quitar del encuentro', () => servidor.enviar({ tipo: 'quitar_monstruo', monstruo_id: m.id })),
+    );
+    return caja;
+  }));
+}
+
+$('agregar-monstruos').addEventListener('click', () =>
+  servidor.enviar({ tipo: 'agregar_monstruos', srd_clave: $('criatura').value, cantidad: parseInt($('criatura-cantidad').value, 10) || 1 }));
 $('narrar-escena').addEventListener('click', () => servidor.enviar({ tipo: 'narrar_escena' }));
 $('pausar-ia').addEventListener('click', () => servidor.enviar({ tipo: 'pausar_ia', pausada: $('pausar-ia').dataset.pausada !== 'true' }));
 $('ia-pg').addEventListener('change', () => servidor.enviar({ tipo: 'ia_permitir_pg', permitido: $('ia-pg').checked }));

@@ -71,6 +71,22 @@ function ajustePg(id, alAjustarPg) {
   return caja;
 }
 
+// Los jugadores solo ven el estado; la barra va por tramos, nunca con PG exactos.
+const BARRA_ESTADO = { sano: 100, herido: 70, malherido: 30, 'caído': 0 };
+
+export function pintarEnemigos(monstruos = []) {
+  $('enemigos').replaceChildren(...monstruos.map((m) => {
+    const r = el('div', `retrato enemigo${m.estado === 'caído' ? ' caido' : ''}`);
+    r.title = `${m.nombre}: ${m.estado}`;
+    const vida = el('div', `vida${m.estado === 'malherido' ? ' baja' : ''}`);
+    const barra = el('span');
+    barra.style.width = `${BARRA_ESTADO[m.estado] ?? 0}%`;
+    vida.append(barra);
+    r.append(el('div', 'circulo', iniciales(m.nombre)), el('div', 'nombre', m.nombre), vida, el('div', 'estado-monstruo', m.estado));
+    return r;
+  }));
+}
+
 export function pintarFicha(jugador) {
   const ficha = $('ficha');
   if (!jugador) {

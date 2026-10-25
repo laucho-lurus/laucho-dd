@@ -5,7 +5,9 @@ import type { GmIa } from '../ia/gm-ia.ts';
 import type { EstadoGasto } from '../ia/presupuesto.ts';
 import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
-import { SIN_INTERVENCION, type IntervencionIa, type Sala } from './sala.ts';
+import { intervencionVacia, SIN_INTERVENCION, unirIntervenciones, type IntervencionIa, type Sala } from './sala.ts';
+import type { Monstruo } from '../rules/monstruos.ts';
+import type { Objetivo } from '../ia/gm-ia.ts';
 
 const AUTOR_IA = 'gm_ia';
 const EVENTOS_CONTEXTO = 40; // la IA usa los últimos 20 de juego y 8 de chat
@@ -15,7 +17,12 @@ export const TIEMPO_MAXIMO_MS = 45_000; // pasado esto se libera la sala aunque 
 export interface Puertos {
   repo: Repositorio;
   publicar(sala: Sala, tipo: TipoEvento, autor: string, datos: Record<string, unknown>): Promise<Evento | { id: null }>;
-  pedirTirada(sala: Sala, autor: string, personajeId: string, tirada: { chequeo?: string; notacion?: string }, motivo: string | null, cd: number | null): Promise<void>;
+  pedirTirada(
+    sala: Sala, autor: string, personajeId: string, tirada: { chequeo?: string; notacion?: string }, motivo: string | null, cd: number | null,
+    objetivo?: Objetivo,
+  ): Promise<void>;
+  agregarMonstruos(sala: Sala, autor: string, srdClave: string, cantidad: number, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; nuevos: Monstruo[] }>;
+  criaturas(sala: Sala): Promise<{ srd_clave: string; nombre: string }[]>;
   registro(mensaje: string, err?: unknown): void;
   guardarEstado(sala: Sala): Promise<void>;
   /** Aplica PG y publica el evento. Devuelve el cambio real (tras recortar a 0 y al máximo). */
@@ -33,6 +40,7 @@ export class MesaIa {
   readonly perfiles: AlmacenPerfiles;
   private readonly puertos: Puertos;
   private readonly enCurso = new WeakMap<Sala, Promise<void>>(); // una intervención a la vez por sala
+  private readonly paneles = new WeakMap<Sala, Promise<void>>();
 
   private readonly tiempoMaximo: number;
 
@@ -52,7 +60,7 @@ export class MesaIa {
     if (!this.gm) return 'La IA está desactivada: falta ANTHROPIC_API_KEY en el servidor';
     const perfil = await this.perfiles.buscar(perfilId);
     if (!perfil) return 'No existe ese perfil de GM';
-    sala.ia = { perfil, pausada: false, puede_pg: true, ultima: SIN_INTERVENCION };
+    sala.ia = { perfil, pausada: false, puede_pg: true, ultima: SIN_INTERVENCION, arrastre: SIN_INTERVENCION };
     return null;
   }
 
@@ -107,6 +115,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
   /** Para tests y apagado: espera a que termine la intervención en curso. */
   async esperar(sala: Sala) {
     await this.enCurso.get(sala);
+    await this.paneles.get(sala);
   }
 
   permitirPg(sala: Sala, permitido: boolean) {
@@ -134,6 +143,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     const firma = `GM IA · ${perfil.nombre}`;
     const ids: number[] = [];
     const cambiosPg: IntervencionIa['pg'] = [];
+    const agregados: string[] = [];
     const anotar = (e: Evento | { id: null }) => {
       if (e.id !== null) ids.push(e.id);
     };
@@ -147,6 +157,8 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
           jugadores: sala.estado().jugadores,
           eventos: await this.puertos.repo.ultimosEventos(sala.sesion.id, EVENTOS_CONTEXTO),
           permitir_pg: sala.ia?.puede_pg ?? false,
+          monstruos: sala.listaMonstruos(),
+          criaturas: await this.puertos.criaturas(sala),
         }),
         disparador,
         {
@@ -154,9 +166,9 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
             anotar(await this.puertos.publicar(sala, 'mensaje', AUTOR_IA, { texto, personaje_nombre: firma, ia: true }));
             return 'Narración publicada';
           }),
-          pedirTirada: (personajeId, tirada, cd, motivo) => sala.encolar(async () => {
+          pedirTirada: (personajeId, tirada, cd, motivo, objetivo) => sala.encolar(async () => {
             try {
-              await this.puertos.pedirTirada(sala, AUTOR_IA, personajeId, esChequeo(tirada) ? { chequeo: tirada } : { notacion: tirada }, motivo, cd);
+              await this.puertos.pedirTirada(sala, AUTOR_IA, personajeId, esChequeo(tirada) ? { chequeo: tirada } : { notacion: tirada }, motivo, cd, objetivo);
             } catch (err) {
               return `No se pudo pedir la tirada: ${(err as Error).message}`;
             }
@@ -168,6 +180,16 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
             await this.puertos.guardarEstado(sala);
             anotar(await this.puertos.publicar(sala, 'estado', AUTOR_IA, { cambio: 'nodo', nodo_id: nodoId, titulo: buscarNodo(sala.diagrama, nodoId)?.titulo, personaje_nombre: firma, ia: true }));
             return `Ahora en el nodo ${nodoId}`;
+          }),
+          agregarMonstruos: (srdClave, cantidad) => sala.encolar(async () => {
+            try {
+              const r = await this.puertos.agregarMonstruos(sala, AUTOR_IA, srdClave, cantidad, { ia: true, firma });
+              anotar(r.evento);
+              agregados.push(...r.nuevos.map((m) => m.id));
+              return `Entran: ${r.nuevos.map((m) => `${m.nombre} (id ${m.id})`).join(', ')}`;
+            } catch (err) {
+              return `No se pudieron sacar: ${(err as Error).message}`;
+            }
           }),
           aplicarPg: (personajeId, cantidad, motivo) => sala.encolar(async () => {
             if (!sala.ia?.puede_pg) return 'El GM humano desactivó que apliques daño o curación';
@@ -193,12 +215,23 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
       // Mensaje del SDK o de red; nunca incluye la key.
       sala.enviarGm({ tipo: 'error', mensaje: `La IA falló: ${(err as Error).message}`.slice(0, 300) });
     } finally {
-      if (sala.ia && (ids.length || cambiosPg.length)) sala.ia = { ...sala.ia, ultima: { eventos: ids, pg: cambiosPg } };
+      if (sala.ia) {
+        const hecho = unirIntervenciones(sala.ia.arrastre, { eventos: ids, pg: cambiosPg, agregados });
+        sala.ia = { ...sala.ia, arrastre: SIN_INTERVENCION, ...(!intervencionVacia(hecho) && { ultima: hecho }) };
+      }
     }
   }
 
-  /** Estado privado para el GM humano: nodo, salidas, variables y gasto de IA. */
-  async enviarPanel(sala: Sala) {
+  /** Estado privado para el GM humano. En cola por sala: cada panel se arma y envía en orden, nunca uno viejo después de uno nuevo. */
+  enviarPanel(sala: Sala): Promise<void> {
+    const siguiente = (this.paneles.get(sala) ?? Promise.resolve())
+      .then(() => this.armarYEnviarPanel(sala))
+      .catch((err) => this.puertos.registro('[ia] no se pudo enviar el panel del GM:', err));
+    this.paneles.set(sala, siguiente);
+    return siguiente;
+  }
+
+  private async armarYEnviarPanel(sala: Sala) {
     if (!sala.hayGm()) return;
     const nodo = buscarNodo(sala.diagrama, sala.nodoActual());
     const gasto = this.gm ? await this.gm.estadoGasto() : null;
@@ -209,11 +242,13 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
       salidas: salidas(sala.diagrama, sala.nodoActual()),
       variables: sala.variables(),
       ia: sala.ia
-        ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: this.enCurso.has(sala), puede_deshacer: sala.ia.ultima.eventos.length + sala.ia.ultima.pg.length > 0, puede_pg: sala.ia.puede_pg }
+        ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: this.enCurso.has(sala), puede_deshacer: !intervencionVacia(sala.ia.ultima), puede_pg: sala.ia.puede_pg }
         : null,
       ia_disponible: this.disponible(),
       gasto,
       avisos: await this.puertos.repo.avisosBase().catch(() => []),
+      monstruos: sala.listaMonstruos(), // con PG exactos: solo para el GM
+      criaturas: await this.puertos.criaturas(sala).catch(() => []),
     });
   }
 }
