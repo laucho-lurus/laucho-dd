@@ -1,6 +1,5 @@
 // API HTTP de creación de personajes y archivos subidos.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { ALINEAMIENTOS, CLASES, METODOS, RAZAS } from '../rules/personaje.ts';
 import { randomUUID } from 'node:crypto';
 import { crearPersonaje, leerImagen, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
@@ -8,9 +7,19 @@ import type { Repositorio } from './repositorio.ts';
 import { normalizarCampana, validarDiagrama } from '../rules/diagrama.ts';
 import { unirCriaturas } from '../rules/monstruos.ts';
 import { DIFICULTADES, validarPerfil, type AlmacenPerfiles } from '../ia/perfiles.ts';
+import type { Almacen } from './almacen.ts';
+import { borrarImagen, imagenesDeLaCampana, MAX_IMAGEN_GM_BYTES, subirImagen } from './imagenes.ts';
+import { sanear } from '../rules/imagenes.ts';
 
-const UPLOADS = new URL('../../uploads/', import.meta.url);
 const MAX_CUERPO_BYTES = Math.ceil(MAX_IMAGEN_BYTES * 1.4) + 64 * 1024; // base64 + resto del formulario
+const MAX_CUERPO_GM_BYTES = Math.ceil(MAX_IMAGEN_GM_BYTES * 1.4) + 64 * 1024;
+/** Los archivos subidos nunca se interpretan: tipo fijo, sin sniffing y sin poder ejecutar nada. */
+const CABECERAS_SUBIDOS = {
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': "default-src 'none'; sandbox",
+  'content-disposition': 'inline',
+  'cache-control': 'public, max-age=3600',
+};
 const ARCHIVO_SUBIDO = /^\/uploads\/([0-9a-f-]{36}\.(png|jpg|webp))$/;
 const TIPOS_IMAGEN: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
 
@@ -20,12 +29,12 @@ function json(res: ServerResponse, estado: number, datos: unknown) {
   res.writeHead(estado, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify(datos));
 }
 
-async function leerJson(req: IncomingMessage): Promise<unknown> {
+async function leerJson(req: IncomingMessage, limite = MAX_CUERPO_BYTES): Promise<unknown> {
   const partes: Buffer[] = [];
   let total = 0;
   for await (const parte of req) {
     total += (parte as Buffer).length;
-    if (total > MAX_CUERPO_BYTES) throw new CuerpoDemasiadoGrande();
+    if (total > limite) throw new CuerpoDemasiadoGrande();
     partes.push(parte as Buffer);
   }
   const crudo = Buffer.concat(partes).toString('utf8');
@@ -35,15 +44,49 @@ async function leerJson(req: IncomingMessage): Promise<unknown> {
 const opciones = (tabla: Readonly<Record<string, { nombre: string }>>) =>
   Object.entries(tabla).map(([clave, v]) => ({ clave, ...v }));
 
-export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
+/** Lee el cuerpo JSON y responde el error si no se puede. Devuelve null si ya respondió. */
+async function cuerpoJson(req: IncomingMessage, res: ServerResponse, limite?: number): Promise<Record<string, unknown> | null> {
+  try {
+    return (await leerJson(req, limite)) as Record<string, unknown>;
+  } catch (err) {
+    const grande = err instanceof CuerpoDemasiadoGrande;
+    json(res, grande ? 413 : 400, { error: grande ? 'La imagen es demasiado grande' : 'Petición inválida' });
+    return null;
+  }
+}
+
+export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles, almacen: Almacen) {
   const deps: Dependencias = {
     repo,
     tiradas: new TiradasCaracteristicas(),
-    guardarArchivo: async (nombre, contenido) => {
-      await mkdir(UPLOADS, { recursive: true });
-      await writeFile(new URL(nombre, UPLOADS), contenido, { flag: 'wx' });
-    },
+    guardarArchivo: (nombre, contenido) => almacen.guardar(nombre, contenido),
   };
+
+  /** Página /imagenes: listar por campaña, subir (con dueño) y borrar. */
+  async function atenderImagenes(req: IncomingMessage, res: ServerResponse, ruta: string): Promise<boolean> {
+    if (req.method === 'GET' && ruta === '/api/imagenes') {
+      const campana = new URL(req.url ?? '/', 'http://local').searchParams.get('campana') ?? '';
+      const datos = await imagenesDeLaCampana(repo, campana);
+      if (!datos) json(res, 404, { error: 'No existe esa campaña' });
+      else json(res, 200, datos);
+      return true;
+    }
+    if (req.method === 'POST' && ruta === '/api/imagenes') {
+      const cuerpo = await cuerpoJson(req, res, MAX_CUERPO_GM_BYTES);
+      if (!cuerpo) return true;
+      const r = await subirImagen(repo, almacen, cuerpo);
+      if (r.ok) json(res, 201, { imagen: r.valor });
+      else json(res, 400, { error: r.error });
+      return true;
+    }
+    const borrar = /^\/api\/imagenes\/([0-9a-f-]{1,64})$/i.exec(ruta);
+    if (req.method === 'DELETE' && borrar) {
+      if (await borrarImagen(repo, almacen, borrar[1])) json(res, 200, { ok: true });
+      else json(res, 404, { error: 'No existe esa imagen' });
+      return true;
+    }
+    return false;
+  }
 
   /** Editor de campañas: listar, abrir, validar y guardar; criaturas para los combates. */
   async function atenderCampanas(req: IncomingMessage, res: ServerResponse, ruta: string): Promise<boolean> {
@@ -109,6 +152,7 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
         return true;
       }
       if (ruta.startsWith('/api/campanas') || ruta === '/api/criaturas') return await atenderCampanas(req, res, ruta);
+      if (ruta.startsWith('/api/imagenes')) return await atenderImagenes(req, res, ruta);
       if (req.method === 'GET' && ruta === '/api/perfiles') {
         json(res, 200, { perfiles: await perfiles.listar(), dificultades: DIFICULTADES });
         return true;
@@ -140,6 +184,14 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
           cuerpo = (await leerJson(req)) as Record<string, unknown>;
         } catch (err) {
           json(res, err instanceof CuerpoDemasiadoGrande ? 413 : 400, { error: err instanceof CuerpoDemasiadoGrande ? 'La imagen supera 2 MB' : 'Petición inválida' });
+          return true;
+        }
+        // Con campaña, el fondo queda registrado (y reutilizable) en la tabla imagenes.
+        if (typeof cuerpo?.campana_id === 'string' && cuerpo.campana_id) {
+          const nombre = sanear(typeof cuerpo.nombre === 'string' && cuerpo.nombre ? cuerpo.nombre : 'fondo') || 'fondo';
+          const r = await subirImagen(repo, almacen, { imagen: cuerpo.imagen, pertenece: { tipo: 'fondo', clave: nombre, campana_id: cuerpo.campana_id } });
+          if (r.ok) json(res, 201, { url: r.valor.url });
+          else json(res, 400, { error: r.error });
           return true;
         }
         const imagen = leerImagen(cuerpo?.imagen);
@@ -178,12 +230,9 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
       }
       const subido = req.method === 'GET' ? ARCHIVO_SUBIDO.exec(ruta) : null;
       if (subido) {
-        try {
-          const contenido = await readFile(new URL(subido[1], UPLOADS));
-          res.writeHead(200, { 'content-type': TIPOS_IMAGEN[subido[2]], 'x-content-type-options': 'nosniff' }).end(contenido);
-        } catch {
-          res.writeHead(404).end();
-        }
+        const contenido = await almacen.leer(subido[1]);
+        if (contenido) res.writeHead(200, { 'content-type': TIPOS_IMAGEN[subido[2]], ...CABECERAS_SUBIDOS }).end(contenido);
+        else res.writeHead(404).end();
         return true;
       }
       return false;

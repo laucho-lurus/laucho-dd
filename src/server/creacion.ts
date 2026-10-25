@@ -59,13 +59,13 @@ export class TiradasCaracteristicas {
 }
 
 /** Decodifica una imagen en data URL y comprueba tamaño y formato real. */
-export function leerImagen(dataUrl: unknown): Resultado<{ ext: string; contenido: Buffer }> {
+export function leerImagen(dataUrl: unknown, max = MAX_IMAGEN_BYTES): Resultado<{ ext: string; contenido: Buffer }> {
   if (typeof dataUrl !== 'string') return falla('La imagen no es válida');
   const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
   if (!m) return falla('La imagen debe ser PNG, JPG o WEBP');
-  if ((m[2].length * 3) / 4 > MAX_IMAGEN_BYTES + 3) return falla('La imagen supera 2 MB');
+  if ((m[2].length * 3) / 4 > max + 3) return falla(`La imagen supera ${max / (1024 * 1024)} MB`);
   const contenido = Buffer.from(m[2], 'base64');
-  if (contenido.length > MAX_IMAGEN_BYTES) return falla('La imagen supera 2 MB');
+  if (contenido.length > max) return falla(`La imagen supera ${max / (1024 * 1024)} MB`);
   const formato = FORMATOS.find((f) => f.es(contenido));
   if (!formato) return falla('El archivo no es una imagen PNG, JPG o WEBP');
   return { ok: true, valor: { ext: formato.ext, contenido } };

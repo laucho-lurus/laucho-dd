@@ -1,6 +1,7 @@
 import { Gestor } from './gestor.ts';
 import { crearServidor } from './http.ts';
 import { crearApi } from './api.ts';
+import { AlmacenDisco } from './almacen.ts';
 import { RepositorioMemoria } from './repositorio-memoria.ts';
 import { RepositorioPg } from './repositorio-pg.ts';
 import { RepositorioMixto } from './repositorio-mixto.ts';
@@ -51,7 +52,7 @@ try {
   const respaldo = new Perfiles(ARCHIVO_PERFILES);
   const base = postgres as RepositorioPg | null; // lo asigna repositorio(); TS no lo ve
   const perfiles: AlmacenPerfiles = base ? new PerfilesPg(base.consultor(), () => respaldo.listar()) : respaldo;
-  crearServidor(new Gestor(repo, undefined, { gm, perfiles }), crearApi(repo, perfiles)).listen(PUERTO, () => console.log(`Servidor de salas en http://localhost:${PUERTO}`));
+  crearServidor(new Gestor(repo, undefined, { gm, perfiles }), crearApi(repo, perfiles, new AlmacenDisco(new URL('../../uploads/', import.meta.url)))).listen(PUERTO, () => console.log(`Servidor de salas en http://localhost:${PUERTO}`));
 } catch (err) {
   console.error('No se pudo arrancar:', (err as Error).message);
   process.exit(1);

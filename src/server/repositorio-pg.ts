@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { plantillaDeCriatura, type Plantilla } from '../rules/monstruos.ts';
-import { MIGRACION_001, MIGRACION_002, type Campana, type Encuentro, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
+import { MIGRACION_001, MIGRACION_002, type Campana, type Encuentro, type ImagenGuardada, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
@@ -199,6 +199,44 @@ export class RepositorioPg implements Repositorio {
   async guardarTokenGm(sesionId: string, hash: string) {
     if (!(await this.tieneMigracion002())) return; // sin la columna, el token vive solo en memoria
     await this.pool.query('update sesiones set gm_token_hash = $2 where id = $1', [sesionId, hash]);
+  }
+
+  async listarImagenes(prefijos: string[]) {
+    if (prefijos.length === 0) return [];
+    const r = await this.pool.query<ImagenGuardada>(
+      `select id, ruta, pertenece_a from imagenes
+        where pertenece_a like any($1) order by creada_en`,
+      [prefijos.map((p) => `${p.replace(/[\\%_]/g, '\\$&')}%`)],
+    );
+    return r.rows;
+  }
+
+  async registrarImagen(perteneceA: string, ruta: string) {
+    const cliente = await this.pool.connect();
+    try {
+      await cliente.query('begin');
+      const viejas = await cliente.query<{ ruta: string }>('delete from imagenes where pertenece_a = $1 returning ruta', [perteneceA]);
+      const r = await cliente.query<ImagenGuardada>(
+        "insert into imagenes (ruta, origen, pertenece_a) values ($1, 'subida', $2) returning id, ruta, pertenece_a",
+        [ruta, perteneceA],
+      );
+      const personaje = /^personaje:([0-9a-f-]{36})$/i.exec(perteneceA);
+      if (personaje) await cliente.query('update personajes set imagen_id = $2 where id = $1', [personaje[1], r.rows[0].id]);
+      await cliente.query('commit');
+      return { imagen: r.rows[0], reemplazadas: viejas.rows.map((f) => f.ruta) };
+    } catch (err) {
+      await cliente.query('rollback');
+      throw err;
+    } finally {
+      cliente.release();
+    }
+  }
+
+  async borrarImagen(id: string) {
+    if (!UUID.test(id)) return null;
+    await this.pool.query('update personajes set imagen_id = null where imagen_id = $1', [id]);
+    const r = await this.pool.query<{ ruta: string }>('delete from imagenes where id = $1 returning ruta', [id]);
+    return r.rows[0]?.ruta ?? null;
   }
 
   async avisosBase() {

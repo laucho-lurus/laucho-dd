@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Campana, Encuentro, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import type { Campana, Encuentro, ImagenGuardada, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 export interface DatosIniciales {
   campanas?: Campana[];
@@ -13,6 +13,7 @@ export class RepositorioMemoria implements Repositorio {
   private readonly sesiones = new Map<string, Sesion>(); // por código
   private readonly eventos: Evento[] = [];
   private readonly encuentros = new Map<string, Encuentro>(); // sesion_id → monstruos y mapa
+  private imagenes: ImagenGuardada[] = [];
 
   constructor(datos: DatosIniciales = {}) {
     this.campanas = new Map((datos.campanas ?? []).map((c) => [c.id, c]));
@@ -77,6 +78,32 @@ export class RepositorioMemoria implements Repositorio {
 
   async guardarTokenGm(sesionId: string, hash: string) {
     for (const [codigo, s] of this.sesiones) if (s.id === sesionId) this.sesiones.set(codigo, { ...s, gm_token_hash: hash });
+  }
+
+  async listarImagenes(prefijos: string[]) {
+    return this.imagenes.filter((i) => prefijos.some((p) => i.pertenece_a.startsWith(p)));
+  }
+
+  async registrarImagen(perteneceA: string, ruta: string) {
+    const reemplazadas = this.imagenes.filter((i) => i.pertenece_a === perteneceA).map((i) => i.ruta);
+    const imagen = { id: randomUUID(), ruta, pertenece_a: perteneceA };
+    this.imagenes = [...this.imagenes.filter((i) => i.pertenece_a !== perteneceA), imagen];
+    this.enlazarPersonaje(perteneceA, `/${ruta}`);
+    return { imagen, reemplazadas };
+  }
+
+  async borrarImagen(id: string) {
+    const imagen = this.imagenes.find((i) => i.id === id);
+    if (!imagen) return null;
+    this.imagenes = this.imagenes.filter((i) => i.id !== id);
+    this.enlazarPersonaje(imagen.pertenece_a, null);
+    return imagen.ruta;
+  }
+
+  private enlazarPersonaje(perteneceA: string, url: string | null) {
+    if (!perteneceA.startsWith('personaje:')) return;
+    const id = perteneceA.slice('personaje:'.length);
+    this.personajes = this.personajes.map((p) => (p.id === id ? { ...p, imagen_url: url } : p));
   }
 
   async avisosBase() {

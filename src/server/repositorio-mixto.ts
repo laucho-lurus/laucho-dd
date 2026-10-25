@@ -82,6 +82,30 @@ export class RepositorioMixto implements Repositorio {
     return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarTokenGm(sesionId, hash);
   }
 
+  // Las imágenes viven en la base real (la demo en memoria comparte las de criaturas).
+  async listarImagenes(prefijos: string[]) {
+    return [...(await this.principal.listarImagenes(prefijos)), ...(await this.local.listarImagenes(prefijos))];
+  }
+
+  async registrarImagen(perteneceA: string, ruta: string) {
+    return ((await this.esDeLaDemo(perteneceA)) ? this.local : this.principal).registrarImagen(perteneceA, ruta);
+  }
+
+  async borrarImagen(id: string) {
+    return (await this.local.borrarImagen(id)) ?? this.principal.borrarImagen(id);
+  }
+
+  /** Imágenes de nodos, PNJ, fondos o personajes de la campaña demo: en memoria, como ella. */
+  private async esDeLaDemo(perteneceA: string) {
+    const [tipo, id] = perteneceA.split(':');
+    if (['nodo', 'pnj', 'fondo'].includes(tipo)) return this.esLocal(id);
+    if (tipo !== 'personaje') return false;
+    for (const c of await this.local.listarCampanas()) {
+      if ((await this.local.personajesDeCampana(c.id)).some((p) => p.id === id)) return true;
+    }
+    return false;
+  }
+
   async avisosBase() {
     return this.principal.avisosBase();
   }

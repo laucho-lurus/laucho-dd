@@ -37,6 +37,13 @@ export interface Personaje {
   imagen_url?: string | null; // p. ej. "/uploads/<uuid>.png"
 }
 
+/** Fila de la tabla imagenes. */
+export interface ImagenGuardada {
+  id: string;
+  ruta: string; // "uploads/<archivo>"
+  pertenece_a: string;
+}
+
 /** Imagen ya guardada en disco, lista para registrar en la tabla imagenes. */
 export interface NuevaImagen {
   ruta: string; // relativa a la raíz del proyecto: "uploads/<archivo>"
@@ -120,6 +127,15 @@ export interface Repositorio {
   /** Monstruos y mapa del encuentro activo de la sesión (encuentros.participantes). */
   encuentroDeSesion(sesionId: string): Promise<Encuentro>;
   guardarEncuentro(sesionId: string, encuentro: Encuentro): Promise<void>;
+  /** Imágenes cuyo pertenece_a empieza por alguno de los prefijos ("criatura:", "nodo:<campaña>:"…). */
+  listarImagenes(prefijos: string[]): Promise<ImagenGuardada[]>;
+  /**
+   * Registra una imagen y quita las anteriores del mismo dueño (devuelve sus rutas para borrar los archivos).
+   * Si es de un personaje, además la enlaza en personajes.imagen_id.
+   */
+  registrarImagen(perteneceA: string, ruta: string): Promise<{ imagen: ImagenGuardada; reemplazadas: string[] }>;
+  /** Borra la fila (y el enlace del personaje). Devuelve la ruta del archivo, o null si no existía. */
+  borrarImagen(id: string): Promise<string | null>;
   /** Avisos para el GM sobre la base de datos (p. ej. migraciones pendientes). */
   avisosBase(): Promise<string[]>;
   registrarEvento(evento: NuevoEvento): Promise<Evento>;
