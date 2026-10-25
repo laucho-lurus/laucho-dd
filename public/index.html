@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa narrativa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/mesa.css">
+</head>
+<body>
+
+<main id="entrada" class="entrada">
+  <h1>Mesa narrativa</h1>
+  <div class="tarjetas">
+    <section class="tarjeta">
+      <h2>Unirse a una partida</h2>
+      <label>Código de sala
+        <input id="codigo" maxlength="6" autocomplete="off" placeholder="K7MQ2X">
+      </label>
+      <label id="etiqueta-personaje" hidden>Tu personaje
+        <select id="personaje"></select>
+      </label>
+      <button id="unirse" hidden>Entrar a la mesa</button>
+    </section>
+    <section class="tarjeta">
+      <h2>Dirigir una partida</h2>
+      <label>Campaña <select id="campana"></select></label>
+      <button id="crear">Crear sala como GM</button>
+    </section>
+  </div>
+  <p id="aviso-entrada" class="aviso"></p>
+</main>
+
+<div id="mesa" class="mesa" hidden>
+  <header class="cabecera">
+    <div class="sala"><span id="titulo-campana"></span> · Sala <strong id="codigo-sala"></strong> · Ronda <span id="ronda"></span></div>
+    <div id="retratos" class="retratos"></div>
+  </header>
+
+  <section id="narracion" class="narracion" aria-live="polite"></section>
+
+  <aside id="ficha" class="ficha"></aside>
+
+  <footer class="controles">
+    <p id="aviso" class="aviso"></p>
+    <div class="fila">
+      <textarea id="texto" rows="2" placeholder="¿Qué haces?"></textarea>
+      <button id="enviar">Enviar</button>
+    </div>
+    <div class="fila dados">
+      <button data-dado="1d20">d20</button>
+      <button data-dado="1d12">d12</button>
+      <button data-dado="1d8">d8</button>
+      <button data-dado="1d6">d6</button>
+      <button data-dado="1d4">d4</button>
+      <input id="notacion" placeholder="2d6+3" size="7">
+      <button id="tirar">Tirar</button>
+      <div id="dado" class="dado" aria-live="polite"><span class="cara">🎲</span><span class="resultado"></span></div>
+      <button id="turno" class="secundario" hidden>Siguiente turno ▸</button>
+    </div>
+  </footer>
+</div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
