@@ -3,24 +3,40 @@ import { readFile } from 'node:fs/promises';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Gestor } from './gestor.ts';
 
-const INDEX = new URL('../../public/index.html', import.meta.url);
+const PUBLICO = new URL('../../public/', import.meta.url);
+const TIPOS: Record<string, string> = {
+  html: 'text/html; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  js: 'text/javascript; charset=utf-8',
+};
+const ALIAS: Record<string, string> = { '/': 'index.html', '/prueba': 'prueba.html' };
+/** Solo nombres simples dentro de public/ (y public/js/): nada de "..". */
+const RUTA_SEGURA = /^\/(?:js\/)?[a-z0-9-]+\.(html|css|js)$/;
+
+function archivoPublico(url: string): { archivo: URL; tipo: string } | null {
+  const ruta = ALIAS[url] ? `/${ALIAS[url]}` : url;
+  const m = RUTA_SEGURA.exec(ruta);
+  return m ? { archivo: new URL(ruta.slice(1), PUBLICO), tipo: TIPOS[m[1]] } : null;
+}
 const MAX_MENSAJE_BYTES = 16 * 1024;
 const LATIDO_MS = 30_000;
 
 /** Servidor HTTP que sirve public/index.html y acepta WebSockets en /ws. */
 export function crearServidor(gestor: Gestor): Server {
   const http = createServer(async (req, res) => {
-    if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+    const ruta = (req.url ?? '/').split('?')[0];
+    const publico = req.method === 'GET' ? archivoPublico(ruta) : null;
+    if (publico) {
       try {
-        const html = await readFile(INDEX);
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(html);
+        const contenido = await readFile(publico.archivo);
+        res.writeHead(200, { 'content-type': publico.tipo }).end(contenido);
       } catch (err) {
-        console.error('[http] no se pudo leer index.html:', err);
-        res.writeHead(500).end('Error interno');
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') console.error(`[http] no se pudo leer ${ruta}:`, err);
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('No encontrado');
       }
       return;
     }
-    if (req.method === 'GET' && req.url === '/salud') {
+    if (req.method === 'GET' && ruta === '/salud') {
       res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
       return;
     }

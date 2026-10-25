@@ -1,26 +1,47 @@
 import type { DatosIniciales } from './repositorio-memoria.ts';
+import type { Arma, Caracteristicas, Personaje } from './repositorio.ts';
 
 // Campaña de ejemplo para `npm run dev` (solo en memoria, nunca se escribe en Neon).
 export const CAMPANA_DEMO_ID = '00000000-0000-4000-8000-000000000001';
 
-const personaje = (n: number, nombre: string, raza: string, clase: string) => ({
-  id: `00000000-0000-4000-8000-00000000010${n}`,
-  campana_id: CAMPANA_DEMO_ID,
-  nombre,
-  raza,
-  clase,
-  nivel: 1,
-});
+type Ficha = [fue: number, des: number, con: number, int: number, sab: number, car: number];
+
+const personaje = (
+  n: number,
+  nombre: string,
+  raza: string,
+  clase: string,
+  [fue, des, con, int, sab, car]: Ficha,
+  pg: number,
+  ca: number,
+  armas: Arma[],
+): Personaje => {
+  const caracteristicas: Caracteristicas = { fue, des, con, int, sab, car };
+  return {
+    id: `00000000-0000-4000-8000-00000000010${n}`,
+    campana_id: CAMPANA_DEMO_ID,
+    nombre,
+    raza,
+    clase,
+    nivel: 1,
+    caracteristicas,
+    pg_max: pg,
+    pg_actual: pg,
+    datos: { ca, armas },
+  };
+};
+
+const arma = (nombre: string, ataque: string, dano: string): Arma => ({ nombre, ataque, dano });
 
 export const DATOS_DEMO: DatosIniciales = {
   campanas: [{ id: CAMPANA_DEMO_ID, nombre: 'La mina perdida (demo)' }],
   personajes: [
-    personaje(1, 'Brisa', 'Mediana', 'Pícara'),
-    personaje(2, 'Torvald', 'Enano', 'Guerrero'),
-    personaje(3, 'Ilyra', 'Elfa', 'Maga'),
-    personaje(4, 'Doran', 'Humano', 'Clérigo'),
-    personaje(5, 'Kesh', 'Dracónido', 'Paladín'),
-    personaje(6, 'Mira', 'Semielfa', 'Barda'),
-    personaje(7, 'Grok', 'Semiorco', 'Bárbaro'),
+    personaje(1, 'Brisa', 'Mediana', 'Pícara', [8, 17, 12, 13, 12, 14], 9, 14, [arma('Estoque', '+5', '1d8+3 perforante'), arma('Arco corto', '+5', '1d6+3 perforante')]),
+    personaje(2, 'Torvald', 'Enano', 'Guerrero', [16, 12, 16, 10, 11, 8], 13, 18, [arma('Hacha de batalla', '+5', '1d8+3 cortante'), arma('Hacha de mano', '+5', '1d6+3 cortante')]),
+    personaje(3, 'Ilyra', 'Elfa', 'Maga', [8, 14, 12, 17, 13, 10], 7, 12, [arma('Daga', '+4', '1d4+2 perforante'), arma('Rayo de escarcha', '+5', '1d8 frío')]),
+    personaje(4, 'Doran', 'Humano', 'Clérigo', [14, 10, 14, 10, 16, 12], 10, 18, [arma('Maza', '+4', '1d6+2 contundente')]),
+    personaje(5, 'Kesh', 'Dracónido', 'Paladín', [17, 10, 14, 8, 10, 15], 12, 18, [arma('Espada larga', '+5', '1d8+3 cortante'), arma('Jabalina', '+5', '1d6+3 perforante')]),
+    personaje(6, 'Mira', 'Semielfa', 'Barda', [8, 14, 12, 12, 10, 17], 9, 13, [arma('Estoque', '+4', '1d8+2 perforante')]),
+    personaje(7, 'Grok', 'Semiorco', 'Bárbaro', [17, 13, 16, 8, 12, 10], 15, 14, [arma('Gran hacha', '+5', '1d12+3 cortante')]),
   ],
 };

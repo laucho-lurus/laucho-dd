@@ -38,7 +38,7 @@ export class RepositorioPg implements Repositorio {
 
   async personajesDeCampana(campanaId: string) {
     const r = await this.pool.query<Personaje>(
-      'select id, campana_id, nombre, raza, clase, nivel from personajes where campana_id = $1 order by creado_en',
+      'select id, campana_id, nombre, raza, clase, nivel, caracteristicas, pg_max, pg_actual, datos from personajes where campana_id = $1 order by creado_en',
       [campanaId],
     );
     return r.rows;

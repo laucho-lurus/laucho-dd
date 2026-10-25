@@ -1,4 +1,4 @@
-import type { Campana, Personaje, Sesion } from './repositorio.ts';
+import type { Arma, Campana, Caracteristicas, Personaje, Sesion } from './repositorio.ts';
 
 export const MAX_JUGADORES = 6;
 
@@ -15,6 +15,11 @@ export interface EstadoJugador {
   raza: string;
   clase: string;
   nivel: number;
+  caracteristicas: Caracteristicas;
+  pg_max: number;
+  pg_actual: number;
+  ca: number | null;
+  armas: Arma[];
   conectado: boolean;
 }
 
@@ -141,7 +146,19 @@ export class Sala {
       gm_conectado: this.gm !== null,
       jugadores: [...this.asientos].map(([id, c]) => {
         const p = this.personajes.get(id)!;
-        return { personaje_id: id, nombre: p.nombre, raza: p.raza, clase: p.clase, nivel: p.nivel, conectado: c !== null };
+        return {
+          personaje_id: id,
+          nombre: p.nombre,
+          raza: p.raza,
+          clase: p.clase,
+          nivel: p.nivel,
+          caracteristicas: p.caracteristicas,
+          pg_max: p.pg_max,
+          pg_actual: p.pg_actual,
+          ca: p.datos.ca ?? null,
+          armas: p.datos.armas ?? [],
+          conectado: c !== null,
+        };
       }),
       orden: [...this.orden],
       turno_de: this.turnoDe(),

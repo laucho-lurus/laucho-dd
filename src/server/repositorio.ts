@@ -13,6 +13,32 @@ export interface Personaje {
   raza: string;
   clase: string;
   nivel: number;
+  caracteristicas: Caracteristicas;
+  pg_max: number;
+  pg_actual: number;
+  datos: DatosPersonaje;
+}
+
+export interface Caracteristicas {
+  fue: number;
+  des: number;
+  con: number;
+  int: number;
+  sab: number;
+  car: number;
+}
+
+export interface Arma {
+  nombre: string;
+  ataque: string; // p. ej. "+5"
+  dano: string; // p. ej. "1d8+3 cortante"
+}
+
+/** Columna personajes.datos: lo que no tiene columna propia. */
+export interface DatosPersonaje {
+  ca?: number;
+  armas?: Arma[];
+  [clave: string]: unknown;
 }
 
 export interface Sesion {

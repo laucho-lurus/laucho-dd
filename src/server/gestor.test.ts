@@ -139,3 +139,13 @@ test('sala llena: el séptimo jugador no entra', async () => {
   const septimo = await jugador(gestor, codigo, PJ[6]);
   assert.match(septimo.ultimo().mensaje, /llena/);
 });
+
+test('el estado incluye la ficha del personaje', async () => {
+  const { gestor, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[1]);
+  const torvald = a.ultimo().estado.jugadores[0];
+  assert.equal(torvald.ca, 18);
+  assert.equal(torvald.pg_actual, torvald.pg_max);
+  assert.equal(torvald.caracteristicas.fue, 16);
+  assert.ok(torvald.armas.length > 0);
+});
