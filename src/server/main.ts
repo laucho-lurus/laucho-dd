@@ -3,12 +3,14 @@ import { crearServidor } from './http.ts';
 import { crearApi } from './api.ts';
 import { RepositorioMemoria } from './repositorio-memoria.ts';
 import { RepositorioPg } from './repositorio-pg.ts';
+import { RepositorioMixto } from './repositorio-mixto.ts';
 import { CAMPANA_DEMO_ID, DATOS_DEMO } from './demo.ts';
 import type { Repositorio } from './repositorio.ts';
 
 // Uso:
 //   node src/server/main.ts --memoria              → datos de demo en memoria
 //   node --env-file=.env src/server/main.ts        → Neon (DATABASE_URL)
+//   node --env-file=.env src/server/main.ts --demo → Neon + campaña demo en memoria
 //   node --env-file=.env src/server/main.ts --verificar → solo prueba la conexión a Neon
 
 const PUERTO = Number(process.env.PORT ?? 3000);
@@ -28,6 +30,10 @@ async function repositorio(): Promise<Repositorio> {
     console.log(tablas.join(', '));
     await pg.cerrar();
     process.exit(0);
+  }
+  if (args.has('--demo')) {
+    console.log('Campaña de demo disponible en memoria junto a las de Postgres');
+    return new RepositorioMixto(new RepositorioMemoria(DATOS_DEMO), pg);
   }
   return pg;
 }
