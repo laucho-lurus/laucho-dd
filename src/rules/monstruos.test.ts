@@ -9,7 +9,7 @@ test('estado según PG: sano, herido, malherido, caído', () => {
 
 test('la vista pública no lleva cifras', () => {
   const m = { id: 'm1', nombre: 'Kobold 1', srd_clave: 'kobold', ca: 12, pg_max: 5, pg_actual: 3, ataques: [] };
-  assert.deepEqual(monstruoPublico(m), { id: 'm1', nombre: 'Kobold 1', estado: 'herido' });
+  assert.deepEqual(monstruoPublico(m), { id: 'm1', nombre: 'Kobold 1', estado: 'herido', imagen_url: null });
 });
 
 test('kobold del SRD local y plantilla desde la tabla criaturas', () => {

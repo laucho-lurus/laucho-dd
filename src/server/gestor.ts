@@ -345,6 +345,9 @@ export class Gestor {
         if (!r.ok) throw new ErrorDeJuego(r.error);
         return this.cambioDeMapa(sala);
       }
+      case 'mostrar_imagen':
+        soloGm(quien);
+        return this.publicar(sala, 'estado', autor, { cambio: 'imagen', url: m.url, texto: m.titulo ?? '' });
       case 'ver_diagrama':
         soloGm(quien); // el diagrama lleva notas secretas
         return cliente.enviar({ tipo: 'diagrama', diagrama: sala.diagrama, nodo_actual: sala.nodoActual(), variables: sala.variables() });
@@ -423,7 +426,8 @@ export class Gestor {
   private async agregarMonstruos(sala: Sala, autor: string, clave: string, cantidad: number, extra: Record<string, unknown>) {
     const plantilla = (await this.plantillas(sala)).find((c) => c.srd_clave === clave);
     if (!plantilla) throw new ErrorDeJuego('Esa criatura no está disponible');
-    const r = sala.agregarMonstruos(plantilla, cantidad);
+    const imagen = (await this.repo.listarImagenes([`criatura:${clave}`]).catch(() => [])).find((i) => i.pertenece_a === `criatura:${clave}`);
+    const r = sala.agregarMonstruos({ ...plantilla, imagen_url: imagen ? `/${imagen.ruta}` : null }, cantidad);
     if (!r.ok) throw new ErrorDeJuego(r.error);
     await this.guardarMonstruos(sala);
     const evento = await this.publicar(sala, 'estado', autor, { ...extra, cambio: 'monstruos', texto: `Entran: ${r.nuevos.map((x) => x.nombre).join(', ')}.` });

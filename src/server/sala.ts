@@ -310,7 +310,7 @@ export class Sala {
       turno_de: this.turnoDe(),
       ronda: this.ronda,
       max_jugadores: MAX_JUGADORES,
-      monstruos: this.monstruos.map(monstruoPublico),
+      monstruos: this.monstruosVisibles().map(monstruoPublico),
       mapa: this.mapa && vistaJugadores(this.mapa, (id) => this.monstruo(id) !== undefined),
       que_sigue: this.queSigue(),
     };
@@ -354,6 +354,16 @@ export class Sala {
     return ok;
   }
 
+  /** Monstruos que los jugadores pueden ver: los que no están en una casilla bajo la niebla. */
+  private monstruosVisibles(): Monstruo[] {
+    const mapa = this.mapa;
+    if (!mapa) return this.monstruos;
+    return this.monstruos.filter((m) => {
+      const p = mapa.fichas[m.id];
+      return !p || !mapa.ocultas.includes(p.y * mapa.ancho + p.x);
+    });
+  }
+
   /** Restaura los monstruos guardados (servidor reiniciado). */
   cargarMonstruos(monstruos: Monstruo[]) {
     this.monstruos = monstruos.map((m) => ({ ...m }));
@@ -370,7 +380,7 @@ export class Sala {
   }
 
   /** Saca `cantidad` monstruos de la plantilla, numerados ("Kobold 1", "Kobold 2"…). Máx. 6 vivos. */
-  agregarMonstruos(p: Plantilla, cantidad: number): { ok: true; nuevos: Monstruo[] } | { ok: false; error: string } {
+  agregarMonstruos(p: Plantilla & { imagen_url?: string | null }, cantidad: number): { ok: true; nuevos: Monstruo[] } | { ok: false; error: string } {
     const vivos = this.monstruos.filter((m) => m.pg_actual > 0).length;
     if (vivos + cantidad > MAX_MONSTRUOS_VIVOS) return { ok: false, error: `Máximo ${MAX_MONSTRUOS_VIVOS} monstruos vivos a la vez (ya hay ${vivos})` };
     const usados = this.monstruos.filter((m) => m.nombre.startsWith(`${p.nombre} `)).map((m) => Number(m.nombre.slice(p.nombre.length + 1)) || 0);
@@ -383,6 +393,7 @@ export class Sala {
       pg_max: p.pg,
       pg_actual: p.pg,
       ataques: p.ataques,
+      imagen_url: p.imagen_url ?? null,
     }));
     this.monstruos = [...this.monstruos, ...nuevos];
     return { ok: true, nuevos };

@@ -23,6 +23,7 @@ export interface Monstruo {
   pg_max: number;
   pg_actual: number;
   ataques: AtaqueMonstruo[];
+  imagen_url?: string | null;
 }
 
 export type EstadoMonstruo = 'sano' | 'herido' | 'malherido' | 'caído';
@@ -44,7 +45,7 @@ export function estadoMonstruo(m: Pick<Monstruo, 'pg_actual' | 'pg_max'>): Estad
 }
 
 /** Lo que ven los jugadores: nombre y estado, sin cifras. */
-export const monstruoPublico = (m: Monstruo) => ({ id: m.id, nombre: m.nombre, estado: estadoMonstruo(m) });
+export const monstruoPublico = (m: Monstruo) => ({ id: m.id, nombre: m.nombre, estado: estadoMonstruo(m), imagen_url: m.imagen_url ?? null });
 
 /** Las criaturas de la campaña primero; del SRD local, solo las que falten. */
 export function unirCriaturas(propias: Plantilla[]): Plantilla[] {

@@ -7,6 +7,7 @@ import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
 import { intervencionVacia, SIN_INTERVENCION, unirIntervenciones, type IntervencionIa, type Sala } from './sala.ts';
 import type { Monstruo } from '../rules/monstruos.ts';
+import { sanear } from '../rules/imagenes.ts';
 import type { Objetivo } from '../ia/gm-ia.ts';
 
 const AUTOR_IA = 'gm_ia';
@@ -227,6 +228,23 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     }
   }
 
+  /** Imágenes de la escena actual (y su PNJ) y fondos de mapa guardados de la campaña. */
+  private async imagenesParaGm(sala: Sala) {
+    const c = sala.campana.id;
+    const nodo = buscarNodo(sala.diagrama, sala.nodoActual());
+    const escena = nodo ? `nodo:${c}:${nodo.id}` : null;
+    const pnj = nodo?.pnj ? `pnj:${c}:${sanear(nodo.pnj)}` : null;
+    const imagenes = await this.puertos.repo.listarImagenes([escena, pnj, `fondo:${c}:`].filter((x): x is string => x !== null)).catch(() => []);
+    const de = (clave: string | null) => imagenes.find((i) => i.pertenece_a === clave);
+    return {
+      imagenes_nodo: [
+        ...(de(escena) ? [{ nombre: `Escena: ${nodo!.titulo}`, url: `/${de(escena)!.ruta}` }] : []),
+        ...(de(pnj) ? [{ nombre: `PNJ: ${nodo!.pnj}`, url: `/${de(pnj)!.ruta}` }] : []),
+      ],
+      fondos: imagenes.filter((i) => i.pertenece_a.startsWith(`fondo:${c}:`)).map((i) => ({ nombre: i.pertenece_a.split(':')[2], url: `/${i.ruta}` })),
+    };
+  }
+
   /** Estado privado para el GM humano. En cola por sala: cada panel se arma y envía en orden, nunca uno viejo después de uno nuevo. */
   enviarPanel(sala: Sala): Promise<void> {
     const siguiente = (this.paneles.get(sala) ?? Promise.resolve())
@@ -254,6 +272,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
       avisos: await this.puertos.repo.avisosBase().catch(() => []),
       monstruos: sala.listaMonstruos(), // con PG exactos: solo para el GM
       mapa: sala.mapaCompleto(), // con los monstruos bajo la niebla
+      ...(await this.imagenesParaGm(sala)),
       criaturas: await this.puertos.criaturas(sala).catch(() => []),
     });
   }

@@ -21,6 +21,7 @@ export type MensajeCliente =
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
   | { tipo: 'ver_diagrama' }
+  | { tipo: 'mostrar_imagen'; url: string; titulo?: string }
   | { tipo: 'mapa_configurar'; ancho: number; alto: number; velocidad: number }
   | { tipo: 'mapa_fondo'; url: string | null }
   | { tipo: 'mover_ficha'; id: string; x: number; y: number }
@@ -171,6 +172,13 @@ export function validarMensaje(crudo: string): Validacion {
       const velocidad = entero(m, 'velocidad', 1, 100);
       if (esError(ancho) || esError(alto) || esError(velocidad) || !ancho || !alto) return falla('"ancho", "alto" y "velocidad" deben ser enteros');
       return bien({ tipo: 'mapa_configurar', ancho, alto, velocidad: velocidad ?? 6 });
+    }
+    case 'mostrar_imagen': {
+      // Solo imágenes subidas a este servidor.
+      if (typeof m.url !== 'string' || !/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/.test(m.url)) return falla('Imagen inválida');
+      const titulo = m.titulo === undefined ? undefined : texto(m, 'titulo', 200);
+      if (esError(titulo)) return falla(titulo.error);
+      return bien({ tipo: 'mostrar_imagen', url: m.url, ...(titulo && { titulo }) });
     }
     case 'mapa_fondo': {
       if (m.url === null) return bien({ tipo: 'mapa_fondo', url: null });

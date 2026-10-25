@@ -332,8 +332,8 @@ test('monstruos: la IA los saca, el ataque usa su CA y el daño baja sus PG hast
   await humano.enviar({ tipo: 'narrar_escena' });
   await gestor.esperarIa(codigo);
   assert.deepEqual(jugador.ultimo().estado.monstruos, [
-    { id: 'm1', nombre: 'Kobold 1', estado: 'sano' },
-    { id: 'm2', nombre: 'Kobold 2', estado: 'sano' },
+    { id: 'm1', nombre: 'Kobold 1', estado: 'sano', imagen_url: null },
+    { id: 'm2', nombre: 'Kobold 2', estado: 'sano', imagen_url: null },
   ]);
   const panel = humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!;
   assert.deepEqual(panel.monstruos.map((m: Msj) => [m.nombre, m.pg_actual, m.ca]), [['Kobold 1', 5, 12], ['Kobold 2', 5, 12]]);
@@ -395,7 +395,7 @@ test('monstruos: se guardan y vuelven tras reiniciar', async () => {
   const g2 = new Gestor(repo, () => {}, opciones());
   const r2: Msj[] = [];
   await g2.conectar({ enviar: (m) => r2.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
-  assert.deepEqual(r2.find((m) => m.tipo === 'bienvenida')!.estado.monstruos, [{ id: 'm1', nombre: 'Lobo 1', estado: 'malherido' }]);
+  assert.deepEqual(r2.find((m) => m.tipo === 'bienvenida')!.estado.monstruos, [{ id: 'm1', nombre: 'Lobo 1', estado: 'malherido', imagen_url: null }]);
 });
 
 test('el GM vuelve a entrar tras reiniciar con su token; con uno inválido se rechaza', async () => {
@@ -520,4 +520,28 @@ test('mapa: se guarda y vuelve tras reiniciar; el fondo solo acepta imágenes su
   await new Gestor(repo, () => {}, opciones()).conectar({ enviar: (m) => r2.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
   const mapa = r2.find((m) => m.tipo === 'bienvenida')!.estado.mapa;
   assert.deepEqual([mapa.ancho, mapa.alto, mapa.velocidad, mapa.ocultas, mapa.fondo_url], [12, 10, 5, [0], '/uploads/11111111-1111-4111-8111-111111111111.png']);
+});
+
+test('imágenes en partida: el monstruo lleva su imagen, oculta bajo la niebla; el GM muestra la escena', async () => {
+  const { gestor, humano, jugador, codigo } = await mesa([], false);
+  const repo = (gestor as unknown as { repo: RepositorioMemoria }).repo;
+  await repo.registrarImagen('criatura:kobold', 'uploads/22222222-2222-4222-8222-222222222222.png');
+  await repo.registrarImagen(`nodo:${CAMPANA_DEMO_ID}:1`, 'uploads/33333333-3333-4333-8333-333333333333.png');
+  await humano.enviar({ tipo: 'agregar_monstruos', srd_clave: 'kobold', cantidad: 1 });
+  assert.equal(jugador.ultimo().estado.monstruos[0].imagen_url, '/uploads/22222222-2222-4222-8222-222222222222.png');
+
+  await humano.enviar({ tipo: 'mapa_configurar', ancho: 10, alto: 10, velocidad: 6 });
+  await humano.enviar({ tipo: 'mover_ficha', id: 'm1', x: 4, y: 4 });
+  await humano.enviar({ tipo: 'niebla', celdas: [{ x: 4, y: 4 }], oculta: true });
+  assert.deepEqual(jugador.ultimo().estado.monstruos, []); // bajo la niebla tampoco sale en la fila de enemigos
+
+  const panel = humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!;
+  assert.deepEqual(panel.imagenes_nodo, [{ nombre: 'Escena: La boca de la mina', url: '/uploads/33333333-3333-4333-8333-333333333333.png' }]);
+  await humano.enviar({ tipo: 'mostrar_imagen', url: panel.imagenes_nodo[0].url, titulo: 'La boca de la mina' });
+  assert.equal(eventos(jugador).at(-1).datos.cambio, 'imagen');
+  await humano.enviar({ tipo: 'mostrar_imagen', url: 'javascript:alert(1)' });
+  assert.equal(humano.ultimo().mensaje, 'Imagen inválida');
+  await jugador.enviar({ tipo: 'mostrar_imagen', url: panel.imagenes_nodo[0].url });
+  assert.equal(jugador.ultimo().mensaje, 'Solo el GM puede hacer eso');
+  void codigo;
 });
