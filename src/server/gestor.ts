@@ -8,7 +8,7 @@ import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
 import { MesaIa } from './mesa-ia.ts';
 import { hashToken, intervencionVacia } from './sala.ts';
-import { SRD_MONSTRUOS, type Plantilla } from '../rules/monstruos.ts';
+import { unirCriaturas, type Plantilla } from '../rules/monstruos.ts';
 import type { Objetivo } from '../ia/gm-ia.ts';
 import type { GmIa } from '../ia/gm-ia.ts';
 import type { AlmacenPerfiles } from '../ia/perfiles.ts';
@@ -324,6 +324,9 @@ export class Gestor {
         if (error) throw new ErrorDeJuego(error);
         return this.ia!.enviarPanel(sala);
       }
+      case 'ver_diagrama':
+        soloGm(quien); // el diagrama lleva notas secretas
+        return cliente.enviar({ tipo: 'diagrama', diagrama: sala.diagrama, nodo_actual: sala.nodoActual(), variables: sala.variables() });
       case 'cambiar_nodo': {
         soloGm(quien);
         const r = sala.cambiarNodo(m.nodo_id);
@@ -357,10 +360,7 @@ export class Gestor {
   private plantillas(sala: Sala): Promise<Plantilla[]> {
     let p = this.criaturas.get(sala.campana.id);
     if (!p) {
-      p = this.repo.criaturasDeCampana(sala.campana.id).then((propias) => {
-        const claves = new Set(propias.map((c) => c.srd_clave));
-        return [...propias, ...Object.values(SRD_MONSTRUOS).filter((c) => !claves.has(c.srd_clave))];
-      });
+      p = this.repo.criaturasDeCampana(sala.campana.id).then(unirCriaturas);
       p.catch(() => this.criaturas.delete(sala.campana.id)); // reintenta si falló la base
       this.criaturas.set(sala.campana.id, p);
     }

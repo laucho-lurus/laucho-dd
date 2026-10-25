@@ -46,3 +46,13 @@ test('no repite un código de sala entre ambos', async () => {
   assert.ok(await mixto.crearSesion(CAMPANA_DEMO_ID, 'CCCCCC'));
   assert.equal(await mixto.crearSesion(REAL, 'CCCCCC'), null);
 });
+
+test('guardarCampana: la demo se edita en memoria y las nuevas van a la base real', async () => {
+  const { mixto, demo, neon } = preparar();
+  const datos = { nombre: 'Demo editada', diagrama: { nodos: [], flechas: [] }, variables: { a: 1 }, resumen: '' };
+  await mixto.guardarCampana(CAMPANA_DEMO_ID, datos);
+  assert.equal((await demo.buscarCampana(CAMPANA_DEMO_ID))?.nombre, 'Demo editada');
+  const nueva = await mixto.guardarCampana(null, { ...datos, nombre: 'Nueva' });
+  assert.equal((await neon.buscarCampana(nueva.id))?.nombre, 'Nueva');
+  await assert.rejects(mixto.guardarCampana('no-existe', datos));
+});

@@ -229,3 +229,14 @@ test('ver_personajes de una campaña sin personajes devuelve lista vacía, no er
   assert.equal(j.ultimo().tipo, 'personajes');
   assert.deepEqual(j.ultimo().personajes, []);
 });
+
+test('ver_diagrama: solo el GM recibe el diagrama (lleva notas secretas)', async () => {
+  const { gestor, gm, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[0]);
+  await a.enviar({ tipo: 'ver_diagrama' });
+  assert.equal(a.ultimo().mensaje, 'Solo el GM puede hacer eso');
+  await gm.enviar({ tipo: 'ver_diagrama' });
+  assert.equal(gm.ultimo().tipo, 'diagrama');
+  assert.equal(gm.ultimo().nodo_actual, '1');
+  assert.equal(gm.ultimo().diagrama.nodos.length, 3);
+});

@@ -46,6 +46,12 @@ export function estadoMonstruo(m: Pick<Monstruo, 'pg_actual' | 'pg_max'>): Estad
 /** Lo que ven los jugadores: nombre y estado, sin cifras. */
 export const monstruoPublico = (m: Monstruo) => ({ id: m.id, nombre: m.nombre, estado: estadoMonstruo(m) });
 
+/** Las criaturas de la campaña primero; del SRD local, solo las que falten. */
+export function unirCriaturas(propias: Plantilla[]): Plantilla[] {
+  const claves = new Set(propias.map((c) => c.srd_clave));
+  return [...propias, ...Object.values(SRD_MONSTRUOS).filter((c) => !claves.has(c.srd_clave))];
+}
+
 /** Plantilla desde una fila de la tabla criaturas (stats jsonb: ca, pg, ataques). */
 export function plantillaDeCriatura(c: { nombre: string; srd_clave: string | null; stats: Record<string, unknown> }): Plantilla | null {
   const { ca, pg, ataques } = c.stats as { ca?: unknown; pg?: unknown; ataques?: unknown };

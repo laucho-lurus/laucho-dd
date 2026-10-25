@@ -20,6 +20,7 @@ export type MensajeCliente =
   | { tipo: 'narrar_escena' }
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
+  | { tipo: 'ver_diagrama' }
   | { tipo: 'agregar_monstruos'; srd_clave: string; cantidad: number }
   | { tipo: 'quitar_monstruo'; monstruo_id: string }
   | { tipo: 'monstruo_pg'; monstruo_id: string; cantidad: number }
@@ -173,6 +174,7 @@ export function validarMensaje(crudo: string): Validacion {
       return esError(nodo_id) ? falla(nodo_id.error) : bien({ tipo: 'cambiar_nodo', nodo_id });
     }
     case 'narrar_escena':
+    case 'ver_diagrama':
     case 'deshacer_ia':
     case 'ver_campanas':
     case 'siguiente_turno':

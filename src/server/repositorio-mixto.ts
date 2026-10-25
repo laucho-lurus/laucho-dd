@@ -1,5 +1,5 @@
 import type { Monstruo } from '../rules/monstruos.ts';
-import type { EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
+import type { Campana, EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
 
 /**
  * Une dos repositorios: las campañas del `local` (la demo en memoria) se quedan ahí,
@@ -25,6 +25,11 @@ export class RepositorioMixto implements Repositorio {
 
   async listarCampanas() {
     return [...(await this.principal.listarCampanas()), ...(await this.local.listarCampanas())];
+  }
+
+  async guardarCampana(id: string | null, datos: Required<Omit<Campana, 'id'>>) {
+    // Las campañas nuevas van a la base real; la demo se edita en memoria.
+    return (id && (await this.esLocal(id)) ? this.local : this.principal).guardarCampana(id, datos);
   }
 
   async buscarCampana(id: string) {

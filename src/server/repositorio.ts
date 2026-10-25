@@ -98,6 +98,8 @@ export interface Repositorio {
   crearPersonaje(personaje: Personaje, imagen: NuevaImagen | null): Promise<Personaje>;
   guardarPg(personajeId: string, pgActual: number): Promise<void>;
   buscarCampana(id: string): Promise<Campana | null>;
+  /** Crea (sin id) o actualiza la campaña del editor: nombre, diagrama, variables y resumen. */
+  guardarCampana(id: string | null, datos: Required<Omit<Campana, 'id'>>): Promise<Campana>;
   personajesDeCampana(campanaId: string): Promise<Personaje[]>;
   /** Crea la sesión. Devuelve null si el código ya existe. */
   crearSesion(campanaId: string, codigo: string): Promise<Sesion | null>;

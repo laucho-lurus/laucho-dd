@@ -69,6 +69,29 @@ export class RepositorioPg implements Repositorio {
     await this.pool.query('update personajes set pg_actual = $2 where id = $1', [personajeId, pgActual]);
   }
 
+  async guardarCampana(id: string | null, d: Required<Omit<Campana, 'id'>>) {
+    const params = [d.nombre, JSON.stringify(d.diagrama), JSON.stringify(d.variables), d.resumen];
+    if (id) {
+      if (!UUID.test(id)) throw new Error('No existe esa campaña');
+      const r = await this.pool.query<Campana>(
+        'update campanas set nombre = $2, diagrama = $3, variables = $4, resumen = $5 where id = $1 returning id, nombre, diagrama, variables, resumen',
+        [id, ...params],
+      );
+      if (!r.rows[0]) throw new Error('No existe esa campaña');
+      return r.rows[0];
+    }
+    // campanas exige un GM (humano o IA): usamos el primer usuario registrado como GM humano.
+    const r = await this.pool.query<Campana>(
+      `insert into campanas (nombre, diagrama, variables, resumen, gm_usuario_id)
+       select $1, $2, $3, $4, (select id from usuarios order by creado_en limit 1)
+       where exists (select 1 from usuarios)
+       returning id, nombre, diagrama, variables, resumen`,
+      params,
+    );
+    if (!r.rows[0]) throw new Error('Para crear campañas hace falta al menos un usuario GM en la base');
+    return r.rows[0];
+  }
+
   async buscarCampana(id: string) {
     if (!UUID.test(id)) return null;
     const r = await this.pool.query<Campana>('select id, nombre, diagrama, variables, resumen from campanas where id = $1', [id]);

@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { ALINEAMIENTOS, CLASES, METODOS, RAZAS } from '../rules/personaje.ts';
 import { crearPersonaje, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
 import type { Repositorio } from './repositorio.ts';
+import { normalizarCampana, validarDiagrama } from '../rules/diagrama.ts';
+import { unirCriaturas } from '../rules/monstruos.ts';
 import { DIFICULTADES, validarPerfil, type AlmacenPerfiles } from '../ia/perfiles.ts';
 
 const UPLOADS = new URL('../../uploads/', import.meta.url);
@@ -42,6 +44,56 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
     },
   };
 
+  /** Editor de campañas: listar, abrir, validar y guardar; criaturas para los combates. */
+  async function atenderCampanas(req: IncomingMessage, res: ServerResponse, ruta: string): Promise<boolean> {
+    const url = new URL(req.url ?? '/', 'http://local');
+    if (req.method === 'GET' && ruta === '/api/criaturas') {
+      const id = url.searchParams.get('campana') ?? '';
+      json(res, 200, { criaturas: unirCriaturas(id ? await repo.criaturasDeCampana(id) : []) });
+      return true;
+    }
+    if (req.method === 'GET' && ruta === '/api/campanas') {
+      json(res, 200, { campanas: (await repo.listarCampanas()).map(({ id, nombre }) => ({ id, nombre })) });
+      return true;
+    }
+    const abrir = /^\/api\/campanas\/([\w-]{1,64})$/.exec(ruta);
+    if (req.method === 'GET' && abrir) {
+      const c = await repo.buscarCampana(abrir[1]);
+      if (!c) json(res, 404, { error: 'No existe esa campaña' });
+      else json(res, 200, { campana: { diagrama: { nodos: [], flechas: [] }, variables: {}, resumen: '', ...c } });
+      return true;
+    }
+    if (req.method === 'POST' && (ruta === '/api/campanas' || ruta === '/api/campanas/validar')) {
+      let cuerpo: Record<string, unknown>;
+      try {
+        cuerpo = (await leerJson(req)) as Record<string, unknown>;
+      } catch {
+        json(res, 400, { error: 'Petición inválida' });
+        return true;
+      }
+      const n = normalizarCampana(cuerpo);
+      if (!n.ok) {
+        json(res, 400, { error: n.error });
+        return true;
+      }
+      const avisos = validarDiagrama(n.valor.diagrama, n.valor.variables); // avisan, no bloquean
+      if (ruta === '/api/campanas/validar') {
+        json(res, 200, { avisos });
+        return true;
+      }
+      const id = typeof cuerpo.id === 'string' && cuerpo.id ? cuerpo.id : null;
+      try {
+        const campana = await repo.guardarCampana(id, n.valor);
+        console.log(`[api] campaña guardada: ${campana.nombre} (${campana.id})`);
+        json(res, id ? 200 : 201, { campana, avisos });
+      } catch (err) {
+        json(res, 400, { error: (err as Error).message });
+      }
+      return true;
+    }
+    return false;
+  }
+
   /** Atiende la petición si es de la API o de /uploads. Devuelve false si no le toca. */
   return async function atender(req: IncomingMessage, res: ServerResponse, ruta: string): Promise<boolean> {
     try {
@@ -55,6 +107,7 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
         });
         return true;
       }
+      if (ruta.startsWith('/api/campanas') || ruta === '/api/criaturas') return await atenderCampanas(req, res, ruta);
       if (req.method === 'GET' && ruta === '/api/perfiles') {
         json(res, 200, { perfiles: await perfiles.listar(), dificultades: DIFICULTADES });
         return true;

@@ -124,3 +124,15 @@ test('token del GM: con la migración 002 se guarda el hash; sin ella no se toca
   assert.equal(avisos.length, 1);
   assert.match(avisos[0], /migración 002/);
 });
+
+test('guardarCampana usa columnas que existen en campanas y crea con un GM', async () => {
+  const { repo, consultas } = repoFalso();
+  const datos = { nombre: 'X', diagrama: { nodos: [], flechas: [] }, variables: {}, resumen: '' };
+  await repo.guardarCampana('11111111-1111-4111-8111-111111111111', datos);
+  await repo.guardarCampana(null, datos);
+  const cols = columnas('campanas').todas;
+  for (const c of [...consultas[0].sql.matchAll(/(\w+) = \$/g)].map((m) => m[1])) assert.ok(c === 'id' || cols.includes(c), c);
+  const insert = /insert into campanas \(([^)]+)\)/.exec(consultas[1].sql)![1].split(',').map((c) => c.trim());
+  for (const c of insert) assert.ok(cols.includes(c), c);
+  assert.ok(insert.includes('gm_usuario_id')); // check (gm_usuario_id or gm_perfil_id)
+});

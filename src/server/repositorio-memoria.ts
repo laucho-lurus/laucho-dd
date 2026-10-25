@@ -9,7 +9,7 @@ export interface DatosIniciales {
 
 /** Repositorio en memoria: para tests y para `npm run dev` sin base de datos. */
 export class RepositorioMemoria implements Repositorio {
-  private readonly campanas: ReadonlyMap<string, Campana>;
+  private campanas: ReadonlyMap<string, Campana>;
   private personajes: readonly Personaje[];
   private readonly sesiones = new Map<string, Sesion>(); // por código
   private readonly eventos: Evento[] = [];
@@ -32,6 +32,13 @@ export class RepositorioMemoria implements Repositorio {
 
   async guardarPg(personajeId: string, pgActual: number) {
     this.personajes = this.personajes.map((p) => (p.id === personajeId ? { ...p, pg_actual: pgActual } : p));
+  }
+
+  async guardarCampana(id: string | null, datos: Required<Omit<Campana, 'id'>>) {
+    if (id && !this.campanas.has(id)) throw new Error('No existe esa campaña');
+    const campana: Campana = { id: id ?? randomUUID(), ...datos };
+    this.campanas = new Map([...this.campanas, [campana.id, campana]]);
+    return campana;
   }
 
   async buscarCampana(id: string) {
