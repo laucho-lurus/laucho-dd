@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { roll } from '../rules/dice.ts';
 import { tiradaDeChequeo } from '../rules/habilidades.ts';
+import { buscarNodo } from '../rules/aventura.ts';
 import { motivoPorDefecto, textoPeticion, textoTirada } from '../rules/tiradas.ts';
 import { generarCodigo } from './codigo.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
@@ -332,7 +333,7 @@ export class Gestor {
         const r = sala.cambiarNodo(m.nodo_id);
         if (!r.ok) throw new ErrorDeJuego(r.error);
         await this.guardarEstado(sala);
-        return this.publicar(sala, 'estado', autor, { cambio: 'nodo', nodo_id: m.nodo_id });
+        return this.publicar(sala, 'estado', autor, { cambio: 'nodo', nodo_id: m.nodo_id, titulo: buscarNodo(sala.diagrama, m.nodo_id)?.titulo });
       }
       case 'aplicar_pg': {
         soloGm(quien);

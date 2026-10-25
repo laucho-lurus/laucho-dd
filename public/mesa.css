@@ -182,3 +182,8 @@ input, select, textarea {
 .gm-monstruo button { padding: 1px 6px; font-size: .75rem; }
 .gm-monstruo input { width: 40px; padding: 1px; font-size: .75rem; }
 #criatura-cantidad { width: 56px; }
+
+/* Diagrama en modo lectura para el GM durante la partida */
+.diagrama-gm { position: fixed; inset: 24px; z-index: 10; display: grid; grid-template-rows: auto 1fr; gap: 8px; background: var(--fondo); border: 1px solid var(--oro); border-radius: 10px; padding: 10px; box-shadow: 0 10px 40px #000a; }
+.diagrama-cabecera { display: flex; gap: 12px; align-items: center; color: var(--oro); }
+.diagrama-cabecera small { color: var(--tenue); flex: 1; }

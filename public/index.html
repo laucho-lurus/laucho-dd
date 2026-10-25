@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/mesa.css">
+<link rel="stylesheet" href="/editor.css">
 </head>
 <body>
 
@@ -89,6 +90,7 @@
       </div>
       <div class="fila">
         <label>Nodo <select id="nodo"></select></label>
+        <button id="ver-diagrama" class="secundario">Ver diagrama</button>
         <small id="notas-nodo" class="notas-nodo"></small>
       </div>
       <div id="gm-monstruos" class="gm-monstruos"></div>
@@ -179,6 +181,14 @@
   </footer>
 </div>
 
+<div id="diagrama-gm" class="diagrama-gm" hidden>
+  <div class="diagrama-cabecera">
+    <strong>Diagrama de la campaña</strong>
+    <small>Haz clic en un nodo para saltar a él. El nodo actual tiene borde blanco.</small>
+    <button id="cerrar-diagrama" class="secundario">Cerrar</button>
+  </div>
+  <svg id="lienzo-gm" class="lienzo" aria-label="Diagrama de la campaña (solo lectura)"></svg>
+</div>
 <script type="module" src="/js/app.js"></script>
 </body>
 </html>

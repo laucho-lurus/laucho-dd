@@ -3,6 +3,8 @@ import { conectar } from './conexion.js';
 import { agregarEvento, pintarEnemigos, pintarFicha, pintarRetratos } from './vista.js';
 import { detenerGiro, empezarGiro, mostrarResultado } from './dados.js';
 import { agregarChat, iniciarChat } from './chat.js';
+import { crearLienzo } from './editor/lienzo.js';
+import { autoDisponer } from './editor/tipos.js';
 
 const LARGO_CODIGO = 6;
 const claveToken = (codigo) => `gm-token:${codigo}`;
@@ -48,6 +50,8 @@ function recibir(m) {
       );
       $('ia-info').textContent = m.ia_disponible ? 'Con GM IA tú sigues al mando: puedes pausarla o corregirla.' : 'GM IA no disponible (falta la clave de Anthropic en el servidor).';
       return;
+    case 'diagrama':
+      return mostrarDiagrama(m);
     case 'panel_gm':
       return pintarPanel(m);
     case 'personajes':
@@ -183,6 +187,24 @@ function pintarMonstruosGm(monstruos) {
 
 $('agregar-monstruos').addEventListener('click', () =>
   servidor.enviar({ tipo: 'agregar_monstruos', srd_clave: $('criatura').value, cantidad: parseInt($('criatura-cantidad').value, 10) || 1 }));
+// Diagrama en solo lectura: el GM ve dónde está la partida y salta a otro nodo con un clic.
+let lienzoGm = null;
+function mostrarDiagrama({ diagrama, nodo_actual }) {
+  $('diagrama-gm').hidden = false;
+  lienzoGm ??= crearLienzo($('lienzo-gm'), {
+    soloLectura: true,
+    alSeleccionar: (sel) => {
+      if (sel?.tipo !== 'nodo') return;
+      servidor.enviar({ tipo: 'cambiar_nodo', nodo_id: sel.id });
+      $('diagrama-gm').hidden = true;
+    },
+  });
+  lienzoGm.pintar(autoDisponer(diagrama), null, nodo_actual);
+  lienzoGm.encuadrar();
+}
+$('ver-diagrama').addEventListener('click', () => servidor.enviar({ tipo: 'ver_diagrama' }));
+$('cerrar-diagrama').addEventListener('click', () => { $('diagrama-gm').hidden = true; });
+
 $('narrar-escena').addEventListener('click', () => servidor.enviar({ tipo: 'narrar_escena' }));
 $('pausar-ia').addEventListener('click', () => servidor.enviar({ tipo: 'pausar_ia', pausada: $('pausar-ia').dataset.pausada !== 'true' }));
 $('ia-pg').addEventListener('change', () => servidor.enviar({ tipo: 'ia_permitir_pg', permitido: $('ia-pg').checked }));
