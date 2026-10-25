@@ -89,14 +89,14 @@ test('el GM humano deshace la última intervención y cambia de nodo', async () 
   assert.equal(humano.ultimo().tipo, 'error');
 
   await humano.enviar({ tipo: 'cambiar_nodo', nodo_id: '3' });
-  assert.equal(humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1).nodo.id, '3');
+  assert.equal(humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!.nodo.id, '3');
 });
 
 test('si la API falla, el GM ve el error y la sala sigue', async () => {
   const { gestor, humano, jugador, codigo } = await mesa([]);
   await humano.enviar({ tipo: 'narrar_escena' });
   await gestor.esperarIa(codigo);
-  assert.match(humano.recibidos.filter((m) => m.tipo === 'error').at(-1).mensaje, /La IA falló: API caída/);
+  assert.match(humano.recibidos.filter((m) => m.tipo === 'error').at(-1)!.mensaje, /La IA falló: API caída/);
   await jugador.enviar({ tipo: 'accion', texto: 'Sigo' });
   assert.equal(eventos(jugador).at(-1).tipo, 'accion');
 });
