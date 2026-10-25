@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de campañas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/mesa.css">
+<link rel="stylesheet" href="/editor.css">
+</head>
+<body>
+<div class="editor">
+  <header class="barra">
+    <a class="enlace" href="/">← Mesa</a>
+    <strong class="marca">Editor de campañas</strong>
+    <select id="campana" aria-label="Campaña"></select>
+    <button id="nueva" class="secundario">Nueva</button>
+    <input id="nombre" aria-label="Nombre de la campaña">
+    <button id="guardar">Guardar</button>
+    <button id="validar" class="secundario">Revisar</button>
+    <button id="exportar" class="secundario">Exportar JSON</button>
+    <label class="secundario boton-archivo">Importar JSON <input id="importar" type="file" accept="application/json,.json" hidden></label>
+    <span class="separador"></span>
+    <button id="deshacer" class="secundario" title="Ctrl+Z">↶</button>
+    <button id="rehacer" class="secundario" title="Ctrl+Mayús+Z">↷</button>
+    <button id="centrar" class="secundario" title="Ver todo">⌖</button>
+  </header>
+  <div id="nuevos" class="nuevos" aria-label="Añadir nodo"></div>
+  <p id="aviso" class="aviso"></p>
+  <main class="area">
+    <svg id="lienzo" class="lienzo" aria-label="Diagrama de la campaña"></svg>
+    <aside class="lado">
+      <section id="panel"></section>
+      <section>
+        <h2>Variables</h2>
+        <div id="variables"></div>
+      </section>
+    </aside>
+  </main>
+</div>
+<script type="module" src="/js/editor/editor.js"></script>
+</body>
+</html>

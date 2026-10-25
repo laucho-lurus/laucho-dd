@@ -1,0 +1,39 @@
+.editor { display: grid; grid-template-rows: auto auto auto 1fr; height: 100vh; padding: 8px 12px; gap: 6px; }
+.barra, .nuevos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.marca { font-family: 'Cinzel', serif; color: var(--oro); }
+.separador { flex: 1; }
+.boton-archivo { cursor: pointer; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--oro); color: var(--oro); font-family: 'Cinzel', serif; font-size: .85rem; }
+.nuevos button { padding: 4px 10px; font-size: .8rem; }
+.area { display: grid; grid-template-columns: 1fr 320px; gap: 10px; min-height: 0; }
+.lienzo { width: 100%; height: 100%; background: #160f0b; border: 1px solid var(--borde); border-radius: 8px; touch-action: none; user-select: none; cursor: grab; }
+.lado { overflow-y: auto; background: var(--madera); border: 1px solid var(--borde); border-radius: 8px; padding: 12px; display: grid; gap: 16px; align-content: start; }
+.lado h2 { margin: 0 0 6px; color: var(--oro); font-size: 1rem; }
+.lado h3 { margin: 8px 0 4px; color: var(--tenue); font-size: .85rem; }
+.lado .campo { display: grid; gap: 3px; margin-bottom: 8px; color: var(--tenue); font-size: .85rem; }
+.lado textarea { resize: vertical; }
+.lado .fila { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+.lado .corto { width: 64px; }
+.lado .medio { width: 130px; }
+.lado code { color: var(--oro); min-width: 110px; }
+.ayuda { color: var(--tenue); font-size: .8rem; }
+button.peligro { background: var(--herida); color: #fff; margin-top: 8px; }
+/* SVG */
+.nodo { cursor: move; }
+.nodo rect { stroke: #00000055; stroke-width: 2; }
+.nodo.seleccionado rect { stroke: var(--oro); stroke-width: 3; }
+.nodo.actual rect { stroke: #fff; stroke-width: 4; }
+.tipo-nodo { fill: #f4e9d4cc; font-size: 11px; font-family: 'Lora', serif; pointer-events: none; }
+.titulo-nodo { fill: #fff; font-size: 14px; font-family: 'Cinzel', serif; pointer-events: none; }
+.puerto { fill: var(--oro); stroke: #160f0b; stroke-width: 2; cursor: crosshair; }
+.flecha { fill: none; stroke: #b09d80; stroke-width: 2; pointer-events: none; }
+.flecha.condicional { stroke-dasharray: 6 4; }
+.flecha.guia { stroke: var(--oro); }
+.flecha-zona { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+.flecha-grupo.seleccionada .flecha { stroke: var(--oro); stroke-width: 3; }
+.punta { fill: #b09d80; }
+.etiqueta-flecha { fill: var(--texto); font-size: 11px; text-anchor: middle; paint-order: stroke; stroke: #160f0b; stroke-width: 4px; pointer-events: none; }
+@media (max-width: 760px) {
+  .editor { height: auto; }
+  .area { grid-template-columns: 1fr; }
+  .lienzo { height: 60vh; }
+}
