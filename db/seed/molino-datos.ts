@@ -7,7 +7,19 @@ export const variables = { llave_palomar: false, goblins_alerta: false, snik_ali
 export const resumen =
   'Aventura corta nivel 1 (1-2 h): los goblins del osgo Grak tomaron el molino de Robleda y retienen a la molinera Mila.';
 
-const nodo = (id: string, tipo: string, titulo: string, texto: string, notas = '') => ({ id, tipo, titulo, texto, notas });
+// Campos del editor para cada nodo (habilidad y CD, monstruos, opciones, PNJ, recompensas).
+const EXTRAS: Record<string, Record<string, unknown>> = {
+  '2': { opciones: ['Sí, salen ya', 'No / mañana'] },
+  '2b': { monstruos: [{ srd_clave: 'goblin', cantidad: 3 }] },
+  '3': { chequeo: 'supervivencia', cd: 12 },
+  '3c': { monstruos: [{ srd_clave: 'wolf', cantidad: 2 }] },
+  '5': { monstruos: [{ srd_clave: 'goblin', cantidad: 2 }] },
+  '6': { pnj: 'Snik', sabe: 'Que Grak le teme al fuego y cuántos goblins quedan.', quiere: 'Salir vivo del molino.' },
+  '8': { monstruos: [{ srd_clave: 'bugbear', cantidad: 1 }, { srd_clave: 'goblin', cantidad: 1 }] },
+  '9': { recompensas: '50 po (+25 si Mila vuelve viva), lucero del alba de Grak, poción de curación', xp: 450 },
+};
+
+const nodo = (id: string, tipo: string, titulo: string, texto: string, notas = '') => ({ id, tipo, titulo, texto, notas, ...EXTRAS[id] });
 const flecha = (desde: string, hasta: string, etiqueta: string, condicion?: string) =>
   ({ desde, hasta, etiqueta, ...(condicion && { condicion }) });
 
