@@ -110,6 +110,9 @@ export function agregarEvento(evento, nombreDe) {
   const quien = d.personaje_nombre ?? 'Sistema';
   let p;
   switch (evento.tipo) {
+    case 'sistema':
+      p = el('p', 'caja-sistema', d.texto);
+      break;
     case 'mensaje':
       p = el('p', d.ia ? 'gm ia' : 'gm', d.texto);
       if (d.ia) p.prepend(el('span', 'etiqueta-ia', d.personaje_nombre));

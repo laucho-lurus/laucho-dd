@@ -145,3 +145,25 @@ input, select, textarea {
 .narracion .deshecho { display: none; }
 .avisos-base { display: block; color: #f0b37e; font-size: .75rem; }
 .casilla { display: inline-flex; align-items: center; gap: 4px; color: var(--tenue); font-size: .85rem; }
+
+/* Lateral con pestañas: ficha y chat de mesa */
+.lateral { grid-area: ficha; display: flex; flex-direction: column; min-height: 0; gap: 6px; }
+.lateral .ficha, .lateral .chat { flex: 1; min-height: 0; }
+.pestanas { display: flex; gap: 4px; }
+.pestana { background: var(--madera); color: var(--tenue); border: 1px solid var(--borde); padding: 4px 10px; font-size: .8rem; }
+.pestana.activa { background: var(--madera-clara); color: var(--oro); border-color: var(--oro); }
+.no-leidos { background: var(--herida); color: #fff; border-radius: 10px; padding: 0 6px; font-size: .7rem; margin-left: 4px; }
+.chat { display: flex; flex-direction: column; background: var(--madera); border: 1px solid var(--borde); border-radius: 8px; padding: 8px; }
+.chat-mensajes { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; font-size: .9rem; }
+.chat-mensajes li { padding: 3px 0; }
+.chat-mensajes .autor { font-family: 'Cinzel', serif; color: var(--oro); font-size: .8rem; margin-right: 4px; }
+.chat-mensajes .en-personaje { font-style: italic; }
+.chat-mensajes .fuera { color: var(--tenue); }
+.chat-form { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chat-form input { flex: 1; min-width: 120px; }
+/* Caja de bienvenida y "Cómo se juega": distinta de la narración */
+.narracion .caja-sistema { white-space: pre-line; font-size: .85rem; color: #5b4a37; background: rgba(90, 60, 20, .08); border: 1px dashed #c7b18a; border-radius: 6px; padding: 8px 12px; }
+.como-se-juega { font-size: .8rem; color: var(--tenue); margin-top: 4px; }
+.como-se-juega summary { cursor: pointer; color: var(--oro); font-family: 'Cinzel', serif; }
+.como-se-juega ol { margin: 4px 0; padding-left: 20px; }
+@media (max-width: 760px) { .lateral { min-height: 320px; } }

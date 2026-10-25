@@ -42,11 +42,37 @@
   <header class="cabecera">
     <div class="sala"><span id="titulo-campana"></span> · Sala <strong id="codigo-sala"></strong> · Ronda <span id="ronda"></span></div>
     <div id="retratos" class="retratos"></div>
+    <details class="como-se-juega">
+      <summary>Cómo se juega</summary>
+      <ol>
+        <li>En tu turno escribe qué hace tu personaje, en texto libre.</li>
+        <li>Cuando el GM pida una tirada te aparecerá un botón para tirar; no puedes tirar por tu cuenta.</li>
+        <li>Fuera de turno puedes hablar con el grupo en el chat de mesa (pestaña a la derecha).</li>
+        <li>Si el GM es una IA, el GM humano puede intervenir o pausarla en cualquier momento. Si algo no te cuadra, díselo en el chat.</li>
+      </ol>
+    </details>
   </header>
 
   <section id="narracion" class="narracion" aria-live="polite"></section>
 
-  <aside id="ficha" class="ficha"></aside>
+  <aside class="lateral">
+    <div class="pestanas">
+      <button class="pestana activa" data-pestana="ficha">Ficha</button>
+      <button class="pestana" data-pestana="chat">Chat de mesa <span id="no-leidos" class="no-leidos" hidden></span></button>
+    </div>
+    <div id="ficha" class="ficha"></div>
+    <div id="chat" class="chat" hidden>
+      <ul id="chat-mensajes" class="chat-mensajes"></ul>
+      <form id="chat-form" class="chat-form">
+        <input id="chat-texto" maxlength="300" placeholder="Habla con el grupo…" autocomplete="off" aria-label="Mensaje de chat">
+        <select id="chat-modo" aria-label="Tipo de mensaje">
+          <option value="fuera">Fuera de personaje</option>
+          <option value="en">En personaje</option>
+        </select>
+        <button>Enviar</button>
+      </form>
+    </div>
+  </aside>
 
   <footer class="controles">
     <div id="panel-gm" class="panel-gm" hidden>

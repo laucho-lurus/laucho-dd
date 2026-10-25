@@ -2,6 +2,7 @@
 import { conectar } from './conexion.js';
 import { agregarEvento, pintarFicha, pintarRetratos } from './vista.js';
 import { detenerGiro, empezarGiro, mostrarResultado } from './dados.js';
+import { agregarChat, iniciarChat } from './chat.js';
 
 const LARGO_CODIGO = 6;
 const $ = (id) => document.getElementById(id);
@@ -11,6 +12,7 @@ let miRol = null; // { rol: 'gm' } | { rol: 'jugador', personaje_id }
 
 const servidor = conectar(recibir, () => aviso('Se perdió la conexión. Recarga la página para volver.'));
 servidor.enviar({ tipo: 'ver_campanas' });
+iniciarChat((m) => servidor.enviar(m));
 
 const nombreDe = (id) => estado?.jugadores.find((j) => j.personaje_id === id)?.nombre ?? '—';
 const enMesa = () => miRol !== null;
@@ -39,6 +41,7 @@ function recibir(m) {
       return entrar(m.rol === 'gm' ? { rol: 'gm' } : { rol: 'jugador', personaje_id: m.personaje_id }, m.estado, m.historial);
     case 'evento':
       actualizar(m.estado);
+      if (m.evento.tipo === 'chat') return agregarChat(m.evento);
       agregarEvento(m.evento, nombreDe);
       if (m.evento.tipo === 'tirada') mostrarResultado(m.evento.datos);
       return;
@@ -71,7 +74,7 @@ function entrar(rol, nuevoEstado, historial) {
   $('turno').hidden = $('pedir').hidden = $('dados-libres').hidden = !esGm;
   $('texto').placeholder = rol.rol === 'gm' ? 'Narra la escena…' : '¿Qué haces?';
   actualizar(nuevoEstado);
-  historial.forEach((e) => agregarEvento(e, nombreDe));
+  historial.forEach((e) => (e.tipo === 'chat' ? agregarChat(e, true) : agregarEvento(e, nombreDe)));
 }
 
 function actualizar(nuevoEstado) {
