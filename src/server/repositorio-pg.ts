@@ -26,6 +26,11 @@ export class RepositorioPg implements Repositorio {
     this.pool.on('error', (err) => console.error('[pg] error en conexión inactiva:', err.message));
   }
 
+  /** Acceso directo a la base para otros almacenes (perfiles de GM). */
+  consultor() {
+    return this.pool;
+  }
+
   async listarCampanas() {
     const r = await this.pool.query<Campana>('select id, nombre from campanas order by nombre');
     return r.rows;

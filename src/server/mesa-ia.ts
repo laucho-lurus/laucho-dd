@@ -3,7 +3,7 @@ import { buscarNodo, salidas } from '../rules/aventura.ts';
 import { esChequeo } from '../rules/habilidades.ts';
 import type { GmIa } from '../ia/gm-ia.ts';
 import type { EstadoGasto } from '../ia/presupuesto.ts';
-import type { Perfiles } from '../ia/perfiles.ts';
+import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
 import type { Sala } from './sala.ts';
 
@@ -27,10 +27,10 @@ const AVISOS: Record<EstadoGasto['nivel'], (e: EstadoGasto) => string> = {
 
 export class MesaIa {
   private readonly gm: GmIa | null;
-  readonly perfiles: Perfiles;
+  readonly perfiles: AlmacenPerfiles;
   private readonly puertos: Puertos;
 
-  constructor(gm: GmIa | null, perfiles: Perfiles, puertos: Puertos) {
+  constructor(gm: GmIa | null, perfiles: AlmacenPerfiles, puertos: Puertos) {
     this.gm = gm;
     this.perfiles = perfiles;
     this.puertos = puertos;

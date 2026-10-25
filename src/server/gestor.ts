@@ -7,7 +7,7 @@ import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
 import { MesaIa } from './mesa-ia.ts';
 import type { GmIa } from '../ia/gm-ia.ts';
-import type { Perfiles } from '../ia/perfiles.ts';
+import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 
 const INTENTOS_CODIGO = 10;
 const LARGO_HISTORIAL = 50;
@@ -23,7 +23,7 @@ type Registro = (mensaje: string, err?: unknown) => void;
 
 export interface OpcionesIa {
   gm: GmIa | null; // null: sin API key, la IA queda desactivada
-  perfiles: Perfiles;
+  perfiles: AlmacenPerfiles;
 }
 
 /** Error de uso que se le muestra al cliente tal cual. */

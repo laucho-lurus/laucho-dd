@@ -48,7 +48,16 @@ export function validarPerfil(datos: unknown): { ok: true; perfil: Omit<PerfilGm
   return { ok: true, perfil: { nombre: campos.nombre, descripcion: campos.descripcion, tono: campos.tono, dificultad: d.dificultad as Dificultad } };
 }
 
-export class Perfiles {
+/** Dónde viven los perfiles: archivo JSON (demo) o la tabla gm_perfiles (Neon). */
+export interface AlmacenPerfiles {
+  listar(): Promise<PerfilGm[]>;
+  buscar(id: string): Promise<PerfilGm | null>;
+  guardarPerfil(id: string | null, datos: Omit<PerfilGm, 'id'>): Promise<PerfilGm>;
+}
+
+export const esDificultad = (v: unknown): v is Dificultad => (DIFICULTADES as readonly unknown[]).includes(v);
+
+export class Perfiles implements AlmacenPerfiles {
   private readonly archivo: string;
   private lista: PerfilGm[] | null = null;
 

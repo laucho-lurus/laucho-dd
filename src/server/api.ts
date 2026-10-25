@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { ALINEAMIENTOS, CLASES, METODOS, RAZAS } from '../rules/personaje.ts';
 import { crearPersonaje, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
 import type { Repositorio } from './repositorio.ts';
-import { DIFICULTADES, validarPerfil, type Perfiles } from '../ia/perfiles.ts';
+import { DIFICULTADES, validarPerfil, type AlmacenPerfiles } from '../ia/perfiles.ts';
 
 const UPLOADS = new URL('../../uploads/', import.meta.url);
 const MAX_CUERPO_BYTES = Math.ceil(MAX_IMAGEN_BYTES * 1.4) + 64 * 1024; // base64 + resto del formulario
@@ -32,7 +32,7 @@ async function leerJson(req: IncomingMessage): Promise<unknown> {
 const opciones = (tabla: Readonly<Record<string, { nombre: string }>>) =>
   Object.entries(tabla).map(([clave, v]) => ({ clave, ...v }));
 
-export function crearApi(repo: Repositorio, perfiles: Perfiles) {
+export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
   const deps: Dependencias = {
     repo,
     tiradas: new TiradasCaracteristicas(),
