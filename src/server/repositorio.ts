@@ -17,6 +17,13 @@ export interface Personaje {
   pg_max: number;
   pg_actual: number;
   datos: DatosPersonaje;
+  descripcion?: string;
+  imagen_url?: string | null; // p. ej. "/uploads/<uuid>.png"
+}
+
+/** Imagen ya guardada en disco, lista para registrar en la tabla imagenes. */
+export interface NuevaImagen {
+  ruta: string; // relativa a la raíz del proyecto: "uploads/<archivo>"
 }
 
 export interface Caracteristicas {
@@ -65,6 +72,9 @@ export interface Evento extends NuevoEvento {
 
 export interface Repositorio {
   listarCampanas(): Promise<Campana[]>;
+  /** Guarda el personaje (y su imagen, si tiene) y lo devuelve con imagen_url. */
+  crearPersonaje(personaje: Personaje, imagen: NuevaImagen | null): Promise<Personaje>;
+  guardarPg(personajeId: string, pgActual: number): Promise<void>;
   buscarCampana(id: string): Promise<Campana | null>;
   personajesDeCampana(campanaId: string): Promise<Personaje[]>;
   /** Crea la sesión. Devuelve null si el código ya existe. */

@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Campana, Evento, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import type { Campana, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
@@ -30,6 +30,38 @@ export class RepositorioPg implements Repositorio {
     return r.rows;
   }
 
+  async crearPersonaje(p: Personaje, imagen: NuevaImagen | null) {
+    const cliente = await this.pool.connect();
+    try {
+      await cliente.query('begin');
+      let imagenId: string | null = null;
+      if (imagen) {
+        const r = await cliente.query<{ id: string }>(
+          "insert into imagenes (ruta, origen, pertenece_a) values ($1, 'subida', $2) returning id",
+          [imagen.ruta, `personaje:${p.id}`],
+        );
+        imagenId = r.rows[0].id;
+      }
+      await cliente.query(
+        `insert into personajes (id, campana_id, nombre, descripcion, raza, clase, nivel, caracteristicas, pg_max, pg_actual, datos, imagen_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [p.id, p.campana_id, p.nombre, p.descripcion ?? '', p.raza, p.clase, p.nivel,
+          JSON.stringify(p.caracteristicas), p.pg_max, p.pg_actual, JSON.stringify(p.datos), imagenId],
+      );
+      await cliente.query('commit');
+      return { ...p, imagen_url: imagen ? `/${imagen.ruta}` : null };
+    } catch (err) {
+      await cliente.query('rollback');
+      throw err;
+    } finally {
+      cliente.release();
+    }
+  }
+
+  async guardarPg(personajeId: string, pgActual: number) {
+    await this.pool.query('update personajes set pg_actual = $2 where id = $1', [personajeId, pgActual]);
+  }
+
   async buscarCampana(id: string) {
     if (!UUID.test(id)) return null;
     const r = await this.pool.query<Campana>('select id, nombre from campanas where id = $1', [id]);
@@ -38,7 +70,10 @@ export class RepositorioPg implements Repositorio {
 
   async personajesDeCampana(campanaId: string) {
     const r = await this.pool.query<Personaje>(
-      'select id, campana_id, nombre, raza, clase, nivel, caracteristicas, pg_max, pg_actual, datos from personajes where campana_id = $1 order by creado_en',
+      `select p.id, p.campana_id, p.nombre, p.descripcion, p.raza, p.clase, p.nivel, p.caracteristicas,
+              p.pg_max, p.pg_actual, p.datos, '/' || i.ruta as imagen_url
+         from personajes p left join imagenes i on i.id = p.imagen_id
+        where p.campana_id = $1 order by p.creado_en`,
       [campanaId],
     );
     return r.rows;

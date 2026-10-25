@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Campana, Evento, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import type { Campana, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 export interface DatosIniciales {
   campanas?: Campana[];
@@ -9,7 +9,7 @@ export interface DatosIniciales {
 /** Repositorio en memoria: para tests y para `npm run dev` sin base de datos. */
 export class RepositorioMemoria implements Repositorio {
   private readonly campanas: ReadonlyMap<string, Campana>;
-  private readonly personajes: readonly Personaje[];
+  private personajes: readonly Personaje[];
   private readonly sesiones = new Map<string, Sesion>(); // por código
   private readonly eventos: Evento[] = [];
 
@@ -20,6 +20,16 @@ export class RepositorioMemoria implements Repositorio {
 
   async listarCampanas() {
     return [...this.campanas.values()];
+  }
+
+  async crearPersonaje(personaje: Personaje, imagen: NuevaImagen | null) {
+    const guardado = { ...personaje, imagen_url: imagen ? `/${imagen.ruta}` : null };
+    this.personajes = [...this.personajes, guardado];
+    return guardado;
+  }
+
+  async guardarPg(personajeId: string, pgActual: number) {
+    this.personajes = this.personajes.map((p) => (p.id === personajeId ? { ...p, pg_actual: pgActual } : p));
   }
 
   async buscarCampana(id: string) {

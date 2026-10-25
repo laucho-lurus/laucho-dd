@@ -22,6 +22,7 @@ export interface EstadoJugador {
   tirada_pendiente: { notacion: string; motivo: string | null } | null;
   ca: number | null;
   armas: Arma[];
+  imagen_url: string | null;
   conectado: boolean;
 }
 
@@ -54,7 +55,7 @@ const error = (e: string): Resultado => ({ ok: false, error: e });
 export class Sala {
   readonly sesion: Sesion;
   readonly campana: Campana;
-  private readonly personajes: ReadonlyMap<string, Personaje>;
+  private personajes: ReadonlyMap<string, Personaje>;
   private readonly tokenGm: string | null;
   private gm: Cliente | null = null;
   private readonly asientos = new Map<string, Cliente | null>(); // personaje_id → conexión (null = desconectado)
@@ -80,6 +81,14 @@ export class Sala {
     return resultado;
   }
 
+  /** Suma personajes creados después de abrir la sala. */
+  incorporar(personajes: Personaje[]) {
+    const nuevos = personajes.filter((p) => !this.personajes.has(p.id));
+    if (nuevos.length === 0) return;
+    this.personajes = new Map([...this.personajes, ...nuevos.map((p): [string, Personaje] => [p.id, p])]);
+    for (const p of nuevos) this.pg.set(p.id, p.pg_actual);
+  }
+
   personaje(id: string): Personaje | undefined {
     return this.personajes.get(id);
   }
@@ -91,6 +100,7 @@ export class Sala {
       raza: p.raza,
       clase: p.clase,
       nivel: p.nivel,
+      imagen_url: p.imagen_url ?? null,
       ocupado: this.asientos.get(p.id) != null,
     }));
   }
@@ -193,6 +203,7 @@ export class Sala {
           tirada_pendiente: this.peticionPublica(id),
           ca: p.datos.ca ?? null,
           armas: p.datos.armas ?? [],
+          imagen_url: p.imagen_url ?? null,
           conectado: c !== null,
         };
       }),

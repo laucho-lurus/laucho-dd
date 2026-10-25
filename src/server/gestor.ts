@@ -78,6 +78,7 @@ export class Gestor {
         return this.crearSesion(m.campana_id, cliente);
       case 'ver_personajes': {
         const s = await this.salaPorCodigo(m.codigo);
+        s.incorporar(await this.repo.personajesDeCampana(s.campana.id));
         cliente.enviar({ tipo: 'personajes', codigo: s.sesion.codigo, campana: s.campana, personajes: s.listaPersonajes() });
         return;
       }
@@ -85,6 +86,7 @@ export class Gestor {
       case 'retomar_gm': {
         if (sala) throw new ErrorDeJuego('Ya estás en una sala');
         const s = await this.salaPorCodigo(m.codigo);
+        if (m.tipo === 'unirse' && !s.personaje(m.personaje_id)) s.incorporar(await this.repo.personajesDeCampana(s.campana.id));
         await s.encolar(() => (m.tipo === 'unirse' ? this.unirse(s, m.personaje_id, cliente) : this.retomarGm(s, m.token_gm, cliente)));
         return s;
       }
@@ -214,6 +216,7 @@ export class Gestor {
         soloGm(quien);
         const r = sala.aplicarPg(m.personaje_id, m.cantidad);
         if (!r.ok) throw new ErrorDeJuego(r.error);
+        await this.guardarPg(m.personaje_id, r.pg);
         return this.publicar(sala, 'estado', autor, {
           cambio: 'pg',
           personaje_id: m.personaje_id,
@@ -237,6 +240,14 @@ export class Gestor {
       }
       default:
         throw new ErrorDeJuego('Ya estás en una sala');
+    }
+  }
+
+  private async guardarPg(personajeId: string, pg: number) {
+    try {
+      await this.repo.guardarPg(personajeId, pg);
+    } catch (err) {
+      this.registro('[sala] no se pudieron guardar los PG:', err); // la memoria manda, como con los eventos
     }
   }
 
