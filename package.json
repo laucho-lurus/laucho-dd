@@ -1,0 +1,11 @@
+{
+  "name": "dnd-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "D&D 5e multijugador con GM IA o humano",
+  "scripts": {
+    "test": "node --test src/**/*.test.ts"
+  },
+  "engines": { "node": ">=22.18" }
+}
