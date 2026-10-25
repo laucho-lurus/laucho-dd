@@ -218,3 +218,14 @@ test('el estado incluye la ficha del personaje', async () => {
   assert.equal(torvald.caracteristicas.fue, 16);
   assert.ok(torvald.armas.length > 0);
 });
+
+test('ver_personajes de una campaña sin personajes devuelve lista vacía, no error', async () => {
+  const repo = new RepositorioMemoria({ campanas: [{ id: 'vacia', nombre: 'Sin nadie' }] });
+  const gestor = new Gestor(repo, () => {});
+  const gm = cliente(gestor);
+  await gm.enviar({ tipo: 'crear_sesion', campana_id: 'vacia' });
+  const j = cliente(gestor);
+  await j.enviar({ tipo: 'ver_personajes', codigo: gm.ultimo().codigo });
+  assert.equal(j.ultimo().tipo, 'personajes');
+  assert.deepEqual(j.ultimo().personajes, []);
+});

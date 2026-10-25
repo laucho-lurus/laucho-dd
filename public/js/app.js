@@ -45,6 +45,9 @@ function recibir(m) {
 
 function mostrarPersonajes(personajes) {
   aviso('');
+  const ninguno = personajes.length === 0;
+  $('sin-personajes').hidden = !ninguno;
+  if (ninguno) return;
   $('personaje').replaceChildren(...personajes.map((p) => {
     const o = new Option(`${p.nombre} — ${p.raza} ${p.clase} ${p.nivel}${p.ocupado ? ' (ocupado)' : ''}`, p.id);
     o.disabled = p.ocupado;
@@ -91,7 +94,7 @@ function mostrarPeticion(p) {
 const codigoEscrito = () => $('codigo').value.replace(/\s/g, '').toUpperCase();
 
 $('codigo').addEventListener('input', () => {
-  $('etiqueta-personaje').hidden = $('unirse').hidden = true;
+  $('etiqueta-personaje').hidden = $('unirse').hidden = $('sin-personajes').hidden = true;
   if (codigoEscrito().length === LARGO_CODIGO) servidor.enviar({ tipo: 'ver_personajes', codigo: codigoEscrito() });
 });
 $('unirse').addEventListener('click', () =>
