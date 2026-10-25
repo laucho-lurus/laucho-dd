@@ -1,7 +1,8 @@
 // GM IA: arma el contexto, llama al modelo y ejecuta sus herramientas (máx. 3 vueltas por disparador).
 import type Anthropic from '@anthropic-ai/sdk';
 import { buscarNodo, salidas, type Diagrama, type Variables } from '../rules/aventura.ts';
-import { HABILIDADES } from '../rules/habilidades.ts';
+import { esChequeo, HABILIDADES } from '../rules/habilidades.ts';
+import { MIN_MOTIVO, motivoPorDefecto, motivoValido } from '../rules/tiradas.ts';
 import type { EstadoJugador } from '../server/sala.ts';
 import type { Evento } from '../server/repositorio.ts';
 import { costo, MODELO_POR_DEFECTO } from './precios.ts';
@@ -49,7 +50,8 @@ Reglas que siempre cumples:
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
 - Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.
 - Nunca escribas texto fuera de las herramientas; no confirmes lo que acabas de hacer; narra una sola vez por intervención.
-- Al pedir una tirada, termina tu intervención: narrarás el resultado cuando llegue.
+- Al pedir una tirada, di siempre para qué es en "motivo" y termina tu intervención: narrarás el resultado cuando llegue.
+- Cuando recibas el resultado de una tirada: (a) narra la consecuencia concreta usando solo el número y el éxito o fracaso que te da el servidor, sin inventar cifras de daño ni PG de monstruos; (b) si fue un ataque exitoso y falta el daño, pide la tirada de daño con su motivo; (c) termina diciendo de forma explícita quién actúa a continuación o qué debe hacer el jugador ("Brisa, tu turno ha terminado: sigue Torvald" / "Brisa, escribe tu siguiente acción").
 - Los mensajes "[chat de mesa]" son de los jugadores entre sí: tenlos en cuenta como contexto, pero no necesitan respuesta.`;
 
 const HERRAMIENTAS: Anthropic.Tool[] = [
@@ -60,16 +62,16 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
   },
   {
     name: 'pedir_tirada',
-    description: 'Pide una tirada a un jugador. "tirada" es una habilidad o salvación (p. ej. "percepcion", "salvacion_des") o una notación como "1d20+2".',
+    description: 'Pide una tirada a un jugador. "tirada" es una habilidad o salvación (p. ej. "percepcion", "salvacion_des") o una notación como "1d20+5" o "1d8+3". "motivo" dice para qué es, de forma concreta: "Ataque con arco al kobold más cercano", "Daño del estoque al kobold herido", "Salvación de DES contra la trampa".',
     input_schema: {
       type: 'object',
       properties: {
         jugador: { type: 'string', description: 'personaje_id del jugador' },
         tirada: { type: 'string' },
         cd: { type: 'integer', minimum: 1, maximum: 40 },
-        motivo: { type: 'string' },
+        motivo: { type: 'string', minLength: MIN_MOTIVO, description: 'Para qué es la tirada, concreto (mín. 8 caracteres)' },
       },
-      required: ['jugador', 'tirada'],
+      required: ['jugador', 'tirada', 'motivo'],
     },
   },
   {
@@ -158,8 +160,14 @@ QUÉ PASÓ AHORA: ${disparador}`;
 }
 
 /** Valida una llamada a herramienta contra el contexto y la ejecuta. Devuelve el texto del resultado. */
+interface Cuenta {
+  pg: number;
+  narraciones: number;
+  motivos_fallidos: number;
+}
+
 async function ejecutar(
-  uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acciones, cuenta: { pg: number; narraciones: number },
+  uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acciones, cuenta: Cuenta,
 ): Promise<{ texto: string; error: boolean }> {
   const e = uso.input as Record<string, unknown>;
   const falla = (texto: string) => ({ texto, error: true });
@@ -173,7 +181,15 @@ async function ejecutar(
       if (!c.jugadores.some((j) => j.personaje_id === e.jugador)) return falla('Ese jugador no está en la mesa; usa un id de la lista');
       if (typeof e.tirada !== 'string') return falla('Falta la tirada');
       const cd = Number.isInteger(e.cd) ? (e.cd as number) : null;
-      const motivo = typeof e.motivo === 'string' && e.motivo.trim() ? e.motivo.trim() : null;
+      let motivo = typeof e.motivo === 'string' ? e.motivo.trim() : null;
+      // Las habilidades ya traen su nombre ("Percepción"); el resto necesita un propósito claro.
+      if (!esChequeo(e.tirada) && !motivoValido(motivo)) {
+        if (cuenta.motivos_fallidos === 0) {
+          cuenta.motivos_fallidos += 1;
+          return falla('Falta un motivo concreto (mín. 8 caracteres), p. ej. "Daño del estoque al kobold herido". Vuelve a pedir la tirada con motivo.');
+        }
+        motivo = motivoPorDefecto(e.tirada); // segundo intento fallido: no bloqueamos la partida
+      }
       return { texto: await acciones.pedirTirada(e.jugador as string, e.tirada, cd, motivo), error: false };
     }
     case 'aplicar_pg': {
@@ -230,7 +246,7 @@ export class GmIa {
    */
   async turno(contexto: () => Promise<Contexto>, disparador: string, acciones: Acciones, avisar: Aviso): Promise<void> {
     let c = await contexto();
-    const cuenta = { pg: 0, narraciones: 0 };
+    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0 };
     const herramientas = c.permitir_pg ? HERRAMIENTAS : HERRAMIENTAS.filter((h) => h.name !== 'aplicar_pg');
     const sistema: Anthropic.TextBlockParam[] = [{ type: 'text', text: promptSistema(c.perfil), cache_control: { type: 'ephemeral' } }];
     const mensajes: Anthropic.MessageParam[] = [{ role: 'user', content: promptContexto(c, disparador) }];

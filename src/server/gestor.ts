@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { roll } from '../rules/dice.ts';
 import { tiradaDeChequeo } from '../rules/habilidades.ts';
+import { motivoPorDefecto, textoPeticion, textoTirada } from '../rules/tiradas.ts';
 import { generarCodigo } from './codigo.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
@@ -239,13 +240,14 @@ export class Gestor {
         return this.publicar(sala, 'mensaje', autor, { texto: m.texto, personaje_nombre: nombre });
       case 'tirar': {
         if (quien.rol === 'gm') {
-          return this.publicar(sala, 'tirada', autor, { ...tirar(m.notacion), motivo: m.motivo ?? null, personaje_nombre: nombre });
+          const r = tirar(m.notacion);
+          return this.publicar(sala, 'tirada', autor, { ...r, motivo: m.motivo ?? null, personaje_nombre: nombre, texto: textoTirada(nombre, r, m.motivo ?? null, null) });
         }
         const peticion = sala.tomarPeticion(quien.personaje_id);
         if (!peticion) throw new ErrorDeJuego('No tienes ninguna tirada pendiente: espera a que el GM te pida una');
         const r = tirar(peticion.notacion);
         const exito = peticion.cd === null ? null : r.total >= peticion.cd;
-        await this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre });
+        await this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre, texto: textoTirada(nombre, r, peticion.motivo, exito) });
         const resultado = exito === null ? '' : exito ? ` contra CD ${peticion.cd}: ÉXITO` : ` contra CD ${peticion.cd}: FRACASO`;
         return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.`);
       }
@@ -346,9 +348,17 @@ export class Gestor {
       motivo = t.motivo;
     }
     tirar(notacion); // valida la notación antes de dejarla pendiente
-    const r = sala.pedirTirada(personajeId, { notacion, motivo, cd });
+    const proposito = motivo?.trim() || motivoPorDefecto(notacion); // nunca sin propósito
+    const r = sala.pedirTirada(personajeId, { notacion, motivo: proposito, cd });
     if (!r.ok) throw new ErrorDeJuego(r.error);
-    await this.publicar(sala, 'estado', autor, { cambio: 'pedir_tirada', personaje_id: personajeId, personaje_nombre: destino.nombre, notacion, motivo });
+    await this.publicar(sala, 'estado', autor, {
+      cambio: 'pedir_tirada',
+      personaje_id: personajeId,
+      personaje_nombre: destino.nombre,
+      notacion,
+      motivo: proposito,
+      texto: textoPeticion(destino.nombre, proposito, notacion, autor === 'gm_ia'),
+    });
   }
 
   private async guardarEstado(sala: Sala) {

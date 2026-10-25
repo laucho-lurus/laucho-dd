@@ -191,3 +191,37 @@ test('con la casilla apagada la herramienta no se ofrece y se rechaza', async ()
   assert.ok(!peticiones[0].tools!.some((t) => 'name' in t && t.name === 'aplicar_pg'));
   assert.deepEqual(hechas, []);
 });
+
+test('pedir_tirada sin motivo: pide reintento una vez y luego usa una etiqueta por defecto', async () => {
+  const { cliente, peticiones } = clienteFalso([
+    respuesta([herramienta('pedir_tirada', { jugador: 'pj1', tirada: '1d8+3' }, 'a')]),
+    respuesta([herramienta('pedir_tirada', { jugador: 'pj1', tirada: '1d8+3', motivo: 'daño' }, 'b')]),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', acciones, () => {});
+  const primero = peticiones[1].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
+  assert.equal(primero[0].is_error, true);
+  assert.match(String(primero[0].content), /motivo concreto/);
+  assert.deepEqual(hechas, ['tirada:pj1:1d8+3:null:Daño']);
+  assert.equal(peticiones.length, 2);
+});
+
+test('pedir_tirada con motivo claro pasa a la primera; las habilidades no lo necesitan', async () => {
+  const { cliente } = clienteFalso([
+    respuesta([
+      herramienta('pedir_tirada', { jugador: 'pj1', tirada: '1d20+5', motivo: 'Ataque con arco al kobold más cercano' }, 'a'),
+      herramienta('pedir_tirada', { jugador: 'pj1', tirada: 'sigilo' }, 'b'),
+    ]),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', acciones, () => {});
+  assert.deepEqual(hechas, ['tirada:pj1:1d20+5:null:Ataque con arco al kobold más cercano', 'tirada:pj1:sigilo:null:null']);
+});
+
+test('el prompt exige narrar el resultado sin inventar cifras, pedir el daño y decir qué sigue', () => {
+  const s = promptSistema(PERFILES_INICIALES[0]);
+  assert.match(s, /usando solo el número y el éxito o fracaso que te da el servidor/);
+  assert.match(s, /sin inventar cifras de daño ni PG de monstruos/);
+  assert.match(s, /si fue un ataque exitoso y falta el daño, pide la tirada de daño con su motivo/);
+  assert.match(s, /quién actúa a continuación o qué debe hacer el jugador/);
+});
