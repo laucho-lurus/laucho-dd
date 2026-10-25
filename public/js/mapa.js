@@ -188,7 +188,7 @@ export function crearMapaTactico(o) {
       mapa = vista;
       entidades = new Map([
         ...jugadores.map((j) => [j.personaje_id, { nombre: j.nombre, imagen_url: j.imagen_url, tipo: 'pj', fraccion: Math.max(0, j.pg_actual / j.pg_max) }]),
-        ...monstruos.map((m) => [m.id, { nombre: m.nombre, imagen_url: null, tipo: 'monstruo', fraccion: m.pg_max ? m.pg_actual / m.pg_max : BARRA[m.estado] ?? 0 }]),
+        ...monstruos.map((m) => [m.id, { nombre: m.nombre, imagen_url: m.imagen_url ?? null, tipo: 'monstruo', fraccion: m.pg_max ? m.pg_actual / m.pg_max : BARRA[m.estado] ?? 0 }]),
       ]);
       if (mapa && !gesto) {
         pintar();

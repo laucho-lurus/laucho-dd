@@ -82,7 +82,14 @@ export function pintarEnemigos(monstruos = []) {
     const barra = el('span');
     barra.style.width = `${BARRA_ESTADO[m.estado] ?? 0}%`;
     vida.append(barra);
-    r.append(el('div', 'circulo', iniciales(m.nombre)), el('div', 'nombre', m.nombre), vida, el('div', 'estado-monstruo', m.estado));
+    const circulo = el('div', 'circulo', m.imagen_url ? '' : iniciales(m.nombre));
+    if (m.imagen_url) {
+      const img = el('img');
+      img.src = m.imagen_url;
+      img.alt = m.nombre;
+      circulo.append(img);
+    }
+    r.append(circulo, el('div', 'nombre', m.nombre), vida, el('div', 'estado-monstruo', m.estado));
     return r;
   }));
 }
@@ -155,6 +162,7 @@ export function agregarEvento(evento, nombreDe) {
       p = el('p', 'sistema', textoDeEstado(d, nombreDe));
       if (d.ia && d.firma) p.prepend(el('span', 'etiqueta-ia', d.firma));
   }
+  if (d.cambio === 'imagen') p = imagenEscena(d);
   if (evento.id != null) p.dataset.id = evento.id;
   const narracion = $('narracion');
   if (d.cambio === 'deshacer_ia') {
@@ -162,6 +170,17 @@ export function agregarEvento(evento, nombreDe) {
   }
   narracion.append(p);
   narracion.scrollTop = narracion.scrollHeight;
+}
+
+/** Imagen que el GM mostró a los jugadores (solo /uploads/: el servidor lo valida). */
+function imagenEscena(d) {
+  const figura = el('figure', 'imagen-escena');
+  const img = el('img');
+  img.src = d.url;
+  img.alt = d.texto || 'Imagen de la escena';
+  figura.append(img);
+  if (d.texto) figura.append(el('figcaption', '', d.texto));
+  return figura;
 }
 
 /** "[4, 2] +3 = 9" */

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imágenes de la campaña</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/mesa.css">
+<link rel="stylesheet" href="/personaje.css">
+<link rel="stylesheet" href="/imagenes.css">
+</head>
+<body>
+<main class="creacion">
+  <h1>Imágenes de la campaña</h1>
+  <p><a class="enlace" href="/">← Mesa</a> · <a class="enlace" href="/editor">Editor de campañas</a></p>
+
+  <section class="tarjeta">
+    <div class="rejilla">
+      <label>Campaña <select id="campana"></select></label>
+      <label>Pertenece a
+        <select id="tipo">
+          <option value="nodo">Escena (nodo)</option>
+          <option value="criatura">Criatura</option>
+          <option value="pnj">PNJ</option>
+          <option value="fondo">Fondo de mapa</option>
+          <option value="personaje">Retrato de personaje</option>
+        </select>
+      </label>
+      <label id="etiqueta-clave">Cuál <select id="clave"></select><input id="clave-texto" placeholder="Nombre" hidden></label>
+    </div>
+    <div id="zona" class="zona-soltar" tabindex="0">
+      <div id="vista-previa" class="vista-previa-grande">Arrastra aquí una imagen o haz clic para elegirla<br><small>PNG, JPG o WEBP · máx. 5 MB</small></div>
+      <input id="archivo" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+    </div>
+    <p id="aviso" class="aviso"></p>
+    <div class="fila acciones"><button id="subir" disabled>Subir</button></div>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Checklist de la campaña <span id="progreso" class="ayuda"></span></h2>
+    <ul id="checklist" class="checklist"></ul>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Todas las imágenes</h2>
+    <div id="galeria" class="galeria"></div>
+  </section>
+</main>
+<script type="module" src="/js/imagenes.js"></script>
+</body>
+</html>

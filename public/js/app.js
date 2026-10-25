@@ -155,6 +155,10 @@ function pintarPanel(p) {
     $('ia-pg').checked = ia.puede_pg;
   }
   pintarMonstruosGm(p.monstruos ?? []);
+  pintarImagenesNodo(p.imagenes_nodo ?? []);
+  const fondoActual = (mapaGm ?? estado?.mapa)?.fondo_url ?? '';
+  $('mapa-fondos').replaceChildren(new Option('— sin fondo —', ''), ...(p.fondos ?? []).map((f) => new Option(f.nombre, f.url)));
+  $('mapa-fondos').value = fondoActual;
   monstruosGm = p.monstruos ?? [];
   if (p.mapa !== undefined) mapaGm = p.mapa;
   pintarMapa();
@@ -166,6 +170,18 @@ function pintarPanel(p) {
   $('nodo').replaceChildren(...p.nodos.map((n) => new Option(`${n.id}. ${n.titulo}`, n.id)));
   if (p.nodo) $('nodo').value = p.nodo.id;
   $('notas-nodo').textContent = p.nodo ? `Notas: ${p.nodo.notas || '—'} · Salidas: ${p.salidas.map((s) => `${s.hasta} (${s.etiqueta})`).join(', ') || 'ninguna'}` : '';
+}
+
+/** Imágenes de la escena actual (y su PNJ): el GM decide cuándo enseñarlas. */
+function pintarImagenesNodo(imagenes) {
+  $('imagenes-nodo').replaceChildren(...imagenes.map((i) => {
+    const f = document.createElement('figure');
+    const img = Object.assign(document.createElement('img'), { src: i.url, alt: i.nombre });
+    const b = Object.assign(document.createElement('button'), { className: 'secundario', textContent: 'Mostrar a los jugadores' });
+    b.addEventListener('click', () => servidor.enviar({ tipo: 'mostrar_imagen', url: i.url, titulo: i.nombre.replace(/^(Escena|PNJ): /, '') }));
+    f.append(img, i.nombre, b);
+    return f;
+  }));
 }
 
 /** Solo el GM ve los PG exactos de los monstruos y puede tocarlos. */
@@ -185,6 +201,7 @@ function pintarMonstruosGm(monstruos) {
       if (n) servidor.enviar({ tipo: 'monstruo_pg', monstruo_id: m.id, cantidad: signo * n });
     };
     caja.append(
+      ...(m.imagen_url ? [Object.assign(document.createElement('img'), { src: m.imagen_url, alt: '' })] : []),
       `${m.nombre} ${m.pg_actual}/${m.pg_max} PG · CA ${m.ca}`,
       boton('−', 'Daño', pg(-1)), cantidad, boton('+', 'Curación', pg(1)),
       boton('✕', 'Quitar del encuentro', () => servidor.enviar({ tipo: 'quitar_monstruo', monstruo_id: m.id })),
@@ -230,7 +247,9 @@ $('mapa-fondo').addEventListener('change', async () => {
   const lector = new FileReader();
   lector.onload = async () => {
     try {
-      const r = await fetch('/api/mapas/fondo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ imagen: lector.result }) });
+      // Con la campaña, el fondo queda guardado y se puede volver a elegir en el desplegable.
+      const cuerpo = { imagen: lector.result, campana_id: estado?.campana.id, nombre: archivo.name.replace(/\.[^.]+$/, '') };
+      const r = await fetch('/api/mapas/fondo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) });
       const datos = await r.json();
       if (!r.ok) return aviso(datos.error ?? 'No se pudo subir la imagen.');
       servidor.enviar({ tipo: 'mapa_fondo', url: datos.url });
@@ -240,6 +259,7 @@ $('mapa-fondo').addEventListener('change', async () => {
   };
   lector.readAsDataURL(archivo);
 });
+$('mapa-fondos').addEventListener('change', () => servidor.enviar({ tipo: 'mapa_fondo', url: $('mapa-fondos').value || null }));
 for (const b of document.querySelectorAll('[data-centro]')) {
   b.addEventListener('click', () => {
     for (const x of document.querySelectorAll('[data-centro]')) x.classList.toggle('activa', x === b);

@@ -27,3 +27,9 @@ npm test
 ```
 
 El tope de gasto del GM IA es 5 USD al mes (`AI_MONTHLY_BUDGET_USD`).
+
+## Imágenes y almacenamiento
+
+Las imágenes (retratos, monstruos, escenas, PNJ y fondos de mapa) se suben en `/imagenes` o al crear un personaje. Se registran en la tabla `imagenes` (`pertenece_a`: `criatura:goblin`, `nodo:<campaña>:<nodo>`, `pnj:<campaña>:<nombre>`, `fondo:<campaña>:<nombre>`, `personaje:<id>`) y los archivos van al almacén definido en `src/server/almacen.ts`.
+
+Hoy el almacén es la carpeta local `uploads/` (ignorada por git). Para desplegar con R2 o S3, crea otra clase que implemente la interfaz `Almacen` (`guardar`, `leer`, `borrar`) y úsala en `src/server/main.ts` en lugar de `AlmacenDisco`; las rutas guardadas en la base no cambian. Los archivos se sirven en `/uploads/<uuid>.<ext>` con `X-Content-Type-Options: nosniff` y `Content-Security-Policy: default-src 'none'; sandbox`, y el tipo se valida por la cabecera del archivo, no por la extensión.

@@ -10,7 +10,7 @@ const TIPOS: Record<string, string> = {
   css: 'text/css; charset=utf-8',
   js: 'text/javascript; charset=utf-8',
 };
-const ALIAS: Record<string, string> = { '/': 'index.html', '/prueba': 'prueba.html', '/personaje': 'personaje.html', '/perfiles': 'perfiles.html', '/editor': 'editor.html' };
+const ALIAS: Record<string, string> = { '/': 'index.html', '/prueba': 'prueba.html', '/personaje': 'personaje.html', '/perfiles': 'perfiles.html', '/editor': 'editor.html', '/imagenes': 'imagenes.html' };
 /** Solo nombres simples dentro de public/ (y public/js/): nada de "..". */
 const RUTA_SEGURA = /^\/(?:js\/(?:editor\/)?)?[a-z0-9-]+\.(html|css|js)$/;
 

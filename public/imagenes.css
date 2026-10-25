@@ -1,0 +1,13 @@
+.zona-soltar { border: 2px dashed var(--borde); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; color: var(--tenue); }
+.zona-soltar.encima { border-color: var(--oro); background: var(--madera-clara); }
+.vista-previa-grande img { max-width: 100%; max-height: 260px; border-radius: 6px; }
+.checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.checklist li { display: flex; align-items: center; gap: 8px; }
+.checklist .estado { width: 20px; text-align: center; }
+.checklist .falta { color: #f0907e; }
+.checklist .hecho { color: var(--vida); }
+.checklist img, .galeria img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid var(--borde); }
+.checklist button, .galeria button { padding: 2px 8px; font-size: .75rem; }
+.galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.galeria figure { margin: 0; display: grid; gap: 4px; justify-items: center; background: var(--madera-clara); border-radius: 6px; padding: 6px; font-size: .75rem; color: var(--tenue); word-break: break-all; }
+.galeria img { width: 120px; height: 90px; }

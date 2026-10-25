@@ -34,6 +34,7 @@
       <small id="ia-info" class="ayuda-ia"></small>
       <button id="crear">Crear sala como GM</button>
       <a class="enlace" href="/perfiles">Editar perfiles de GM IA</a>
+      <a class="enlace" href="/imagenes">Imágenes de la campaña</a>
     </section>
   </div>
   <p id="aviso-entrada" class="aviso"></p>
@@ -70,7 +71,8 @@
         <label>Alto <input id="mapa-alto" type="number" min="5" max="60" value="15"></label>
         <label>Velocidad <input id="mapa-velocidad" type="number" min="1" max="30" value="6"></label>
         <button id="mapa-aplicar" class="secundario">Crear / ajustar mapa</button>
-        <label class="boton-archivo">Fondo… <input id="mapa-fondo" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+        <label>Fondo <select id="mapa-fondos"><option value="">— sin fondo —</option></select></label>
+        <label class="boton-archivo">Subir fondo… <input id="mapa-fondo" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
         <label>Niebla
           <select id="mapa-niebla">
             <option value="no">— (mover y medir)</option>
@@ -119,6 +121,7 @@
         <button id="ver-diagrama" class="secundario">Ver diagrama</button>
         <small id="notas-nodo" class="notas-nodo"></small>
       </div>
+      <div id="imagenes-nodo" class="imagenes-nodo"></div>
       <div id="gm-monstruos" class="gm-monstruos"></div>
       <div class="fila">
         <label>Enemigos <select id="criatura"></select></label>
