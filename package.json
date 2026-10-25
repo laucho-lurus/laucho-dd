@@ -5,7 +5,23 @@
   "type": "module",
   "description": "D&D 5e multijugador con GM IA o humano",
   "scripts": {
-    "test": "node --test src/**/*.test.ts"
+    "start": "node --env-file=.env src/server/main.ts",
+    "dev": "node --watch src/server/main.ts --memoria",
+    "dev:neon": "node --env-file=.env --watch src/server/main.ts",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc"
   },
-  "engines": { "node": ">=22.18" }
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "pg": "^8.23.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2"
+  }
 }
