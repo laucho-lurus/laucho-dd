@@ -44,6 +44,13 @@ test('crear sala devuelve código, token y GM conectado', async () => {
   assert.equal(m.estado.gm_conectado, true);
 });
 
+test('ver_campanas lista id y nombre', async () => {
+  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {});
+  const c = cliente(gestor);
+  await c.enviar({ tipo: 'ver_campanas' });
+  assert.deepEqual(c.ultimo(), { tipo: 'campanas', campanas: DATOS_DEMO.campanas });
+});
+
 test('crear sala con campaña inexistente da error', async () => {
   const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {});
   const c = cliente(gestor);

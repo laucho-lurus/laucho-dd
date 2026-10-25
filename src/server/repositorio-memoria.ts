@@ -18,6 +18,10 @@ export class RepositorioMemoria implements Repositorio {
     this.personajes = datos.personajes ?? [];
   }
 
+  async listarCampanas() {
+    return [...this.campanas.values()];
+  }
+
   async buscarCampana(id: string) {
     return this.campanas.get(id) ?? null;
   }

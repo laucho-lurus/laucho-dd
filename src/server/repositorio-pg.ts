@@ -25,6 +25,11 @@ export class RepositorioPg implements Repositorio {
     this.pool.on('error', (err) => console.error('[pg] error en conexión inactiva:', err.message));
   }
 
+  async listarCampanas() {
+    const r = await this.pool.query<Campana>('select id, nombre from campanas order by nombre');
+    return r.rows;
+  }
+
   async buscarCampana(id: string) {
     if (!UUID.test(id)) return null;
     const r = await this.pool.query<Campana>('select id, nombre from campanas where id = $1', [id]);

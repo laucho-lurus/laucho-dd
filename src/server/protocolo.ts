@@ -5,6 +5,7 @@ export const MAX_NOTACION = 40;
 const MAX_ID = 64;
 
 export type MensajeCliente =
+  | { tipo: 'ver_campanas' }
   | { tipo: 'crear_sesion'; campana_id: string }
   | { tipo: 'ver_personajes'; codigo: string }
   | { tipo: 'unirse'; codigo: string; personaje_id: string }
@@ -90,6 +91,7 @@ export function validarMensaje(crudo: string): Validacion {
       }
       return bien({ tipo: 'definir_orden', orden });
     }
+    case 'ver_campanas':
     case 'siguiente_turno':
     case 'estado':
       return bien({ tipo: m.tipo });

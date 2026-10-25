@@ -69,6 +69,9 @@ export class Gestor {
   /** Devuelve la sala a la que el cliente acaba de entrar, si entró a una. */
   private async atender(m: MensajeCliente, cliente: Cliente, sala: Sala | null): Promise<Sala | void> {
     switch (m.tipo) {
+      case 'ver_campanas':
+        cliente.enviar({ tipo: 'campanas', campanas: await this.repo.listarCampanas() });
+        return;
       case 'crear_sesion':
         if (sala) throw new ErrorDeJuego('Ya estás en una sala');
         return this.crearSesion(m.campana_id, cliente);

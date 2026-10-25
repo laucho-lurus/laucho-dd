@@ -20,14 +20,11 @@
 
 <fieldset id="entrada">
   <legend>Entrar</legend>
-  <label>Código de sala <input id="codigo" size="8" autocomplete="off"></label>
-  <button id="ver">Ver personajes</button>
-  <div>
-    <select id="personaje" hidden></select>
-    <button id="unirse" hidden>Unirse</button>
-  </div>
+  <label>Código de sala <input id="codigo" size="8" maxlength="6" autocomplete="off" placeholder="K7MQ2X"></label>
+  <select id="personaje" hidden></select>
+  <button id="unirse" hidden>Unirse</button>
   <hr>
-  <label>Campaña <input id="campana" value="00000000-0000-4000-8000-000000000001" size="38"></label>
+  <label>Campaña <select id="campana"></select></label>
   <button id="crear">Crear sala (GM)</button>
 </fieldset>
 
@@ -94,6 +91,9 @@
     const m = JSON.parse(data);
     $('aviso').textContent = '';
     switch (m.tipo) {
+      case 'campanas':
+        $('campana').replaceChildren(...m.campanas.map((c) => new Option(c.nombre, c.id)));
+        break;
       case 'error': $('aviso').textContent = m.mensaje; break;
       case 'personajes': {
         const sel = $('personaje');
@@ -122,9 +122,15 @@
       case 'estado': pintarEstado(m.estado); break;
     }
   };
+  ws.onopen = () => enviar({ tipo: 'ver_campanas' });
   ws.onclose = () => { $('aviso').textContent = 'Conexión perdida. Recarga la página para volver a entrar.'; };
 
-  $('ver').onclick = () => enviar({ tipo: 'ver_personajes', codigo: $('codigo').value });
+  // Al completar los 6 caracteres del código se cargan solos los personajes.
+  $('codigo').oninput = () => {
+    const codigo = $('codigo').value.replace(/\s/g, '').toUpperCase();
+    $('personaje').hidden = $('unirse').hidden = true;
+    if (codigo.length === 6) enviar({ tipo: 'ver_personajes', codigo });
+  };
   $('unirse').onclick = () => enviar({ tipo: 'unirse', codigo: $('codigo').value, personaje_id: $('personaje').value });
   $('crear').onclick = () => enviar({ tipo: 'crear_sesion', campana_id: $('campana').value });
   $('enviar').onclick = () => {

@@ -38,6 +38,7 @@ export interface Evento extends NuevoEvento {
 }
 
 export interface Repositorio {
+  listarCampanas(): Promise<Campana[]>;
   buscarCampana(id: string): Promise<Campana | null>;
   personajesDeCampana(campanaId: string): Promise<Personaje[]>;
   /** Crea la sesión. Devuelve null si el código ya existe. */
