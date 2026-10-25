@@ -7,6 +7,8 @@ export const rey: SemillaCampana = {
   resumen: 'Larga, niveles 3→6 (4-5 sesiones): el rey Corvan de Aldora muere envenenado y el duque Mervyn gobierna como regente. Los personajes deciden si destapan el crimen en la corte, se unen a la rebelión de los Cardos o rescatan a la heredera escondida.',
   variables: { favor_corte: false, aliados_rebeldes: false, pista_veneno: false, guardia_alertada: false, sabine_aliada: false, elia_a_salvo: false, sello_real: false, duque_expuesto: false },
   diagrama: {
+    introduccion:
+      '{heroes} se encuentran en la plaza de la catedral de Aldora, bajo una lluvia fina, entre miles de personas que despiden al rey Corvan. Llegasteis a la capital buscando trabajo como espadas de alquiler y os encontráis con un reino de luto y un regente que ya se sienta en el trono. Corre el rumor de que el rey estaba sano la víspera y de que la princesa heredera ha desaparecido. Una mujer con capucha verde os observa desde las escaleras de la catedral.',
     nodos: [
       // Sesión 1: el funeral y el crimen
       escena('1', 'El funeral del rey Corvan',

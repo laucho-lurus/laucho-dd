@@ -7,6 +7,8 @@ export const mar: SemillaCampana = {
   resumen: 'Larga, niveles 3→6 (4-5 sesiones): la armadora Calista contrata a los personajes para recuperar la Perla Negra, robada por la Madre Marea, una bruja del mar de Isla Calavera. Para llegar hay que cruzar el Mar de Sal y pactar o pelear con la pirata Malva la Roja.',
   variables: { barco_propio: false, tripulacion_leal: false, mapa_estrellas: false, ruta_malva: false, tregua_pirata: false, perla_negra: false },
   diagrama: {
+    introduccion:
+      '{heroes} desembarcan en el puerto de Salobre con los bolsillos vacíos y el estómago revuelto tras la travesía. En los muelles, los marineros hablan en voz baja de barcos tragados por el Mar de Sal y de una perla robada que mantenía la costa en calma. Un mensajero con el emblema de la armadora Calista os entrega una nota: «Busco gente valiente y sin miedo al agua. Pago en oro». La oficina de Calista está al final del muelle, entre redes y gaviotas.',
     nodos: [
       // Sesión 1: el puerto
       escena('1', 'El puerto de Salobre',

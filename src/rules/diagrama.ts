@@ -35,6 +35,8 @@ export function validarDiagrama(d: Diagrama, variables: Variables): string[] {
     }
   }
   if (!d.nodos.some((n) => n.tipo === 'final')) avisos.push('No hay ningún nodo final');
+  if (!d.introduccion?.trim()) avisos.push('La campaña no tiene introducción de ambientación');
+  else if (!/\{h[eé]roe(s|_\d+)\}/i.test(d.introduccion)) avisos.push('La introducción no nombra a los héroes: usa {heroes}');
   d.nodos.forEach((n, i) => {
     if (i > 0 && !d.flechas.some((f) => f.hasta === n.id)) avisos.push(`"${n.titulo || n.id}" no tiene entrada (nadie llega a él)`);
     if (n.tipo !== 'final' && !d.flechas.some((f) => f.desde === n.id)) avisos.push(`"${n.titulo || n.id}" no tiene salida`);
@@ -105,5 +107,7 @@ export function normalizarCampana(entrada: unknown): Res<{ nombre: string; diagr
     if (!/^[a-z_][a-z0-9_]{0,40}$/i.test(k) || !valorVar(v)) return { ok: false, error: `Variable inválida: ${k}` };
     variables[k] = v;
   }
-  return { ok: true, valor: { nombre, diagrama: { nodos: nodos as Nodo[], flechas: flechas as Flecha[] }, variables, resumen: texto(o.resumen, 1000) } };
+  const introduccion = texto((d as { introduccion?: unknown }).introduccion, 3000).trim();
+  const diagrama: Diagrama = { nodos: nodos as Nodo[], flechas: flechas as Flecha[], ...(introduccion && { introduccion }) };
+  return { ok: true, valor: { nombre, diagrama, variables, resumen: texto(o.resumen, 1000) } };
 }

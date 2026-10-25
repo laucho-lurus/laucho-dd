@@ -7,6 +7,8 @@ export const cripta: SemillaCampana = {
   resumen: 'Corta, nivel 1-2 (una sesión): alguien profana las tumbas de Valdecuervo. Bajo la capilla, el sacerdote Malvern intenta despertar a su hermano con la reliquia del Cuervo.',
   variables: { aliado_sacristan: false, pista_cuervo: false, reliquia: false },
   diagrama: {
+    introduccion:
+      '{heroes} cruzan al atardecer la verja oxidada del cementerio de Valdecuervo, donde los cuervos cubren cada ciprés. El prior Ansel les ha escrito pidiendo ayuda: alguien abre las tumbas desde dentro y los aldeanos ya no se atreven a enterrar a sus muertos. Os espera junto a la capilla con 30 monedas de oro y una lámpara. Bajo vuestros pies, algo rasca la piedra.',
     nodos: [
       escena('1', 'El cementerio de Valdecuervo',
         'La niebla se arrastra entre las lápidas y cientos de cuervos os observan desde los cipreses. Tres tumbas aparecen abiertas desde dentro. El prior Ansel os paga 30 po por descubrir quién profana el camposanto.',

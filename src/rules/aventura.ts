@@ -35,6 +35,8 @@ export interface Flecha {
 export interface Diagrama {
   nodos: Nodo[];
   flechas: Flecha[];
+  /** Introducción de ambientación (plantilla con {heroes}); vive en campanas.diagrama, sin migración. */
+  introduccion?: string;
 }
 
 export type Variables = Record<string, boolean | number | string>;

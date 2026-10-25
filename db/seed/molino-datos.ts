@@ -24,6 +24,8 @@ const flecha = (desde: string, hasta: string, etiqueta: string, condicion?: stri
   ({ desde, hasta, etiqueta, ...(condicion && { condicion }) });
 
 export const diagrama = {
+  introduccion:
+    '{heroes} llegan al anochecer a Robleda, un pueblo de molineros junto al río Lento, y se refugian de la lluvia en la posada del Roble Partido. Hace tres días que la rueda del molino no gira y la molinera Mila no ha vuelto a casa. El alcalde Bertram, con el sombrero entre las manos, os ofrece 50 monedas de oro por averiguar qué ocurre allí arriba. Desde la ventana se ve el molino, oscuro, y una luz que no debería estar encendida.',
   nodos: [
     nodo('1', 'escena', 'La posada del Roble Partido',
       'El alcalde Bertram ofrece 50 po (+25 si traen viva a Mila). El niño Tobías cuenta que su madre guarda una llave del molino en el palomar.',

@@ -7,6 +7,8 @@ export const minas: SemillaCampana = {
   resumen: 'Larga, niveles 1→4 (3-4 sesiones): los mineros de Villahollín desaparecen en las minas de Fuegonegro. Dentro, los kobolds de la Tribu Chispa y los duergar del Clan Hollín se disputan las vetas, mientras un minotauro guarda la antigua forja.',
   variables: { alianza_kobolds: false, alianza_duergar: false, mapa_tuneles: false, llave_forja: false, mineros_libres: false },
   diagrama: {
+    introduccion:
+      '{heroes} llegan a Villahollín por el camino de ceniza, respondiendo a un aviso clavado en todos los tablones de la comarca: «Se buscan valientes. Paga generosa». En el pueblo, las chimeneas están apagadas y las mujeres esperan en silencio a la entrada de las minas de Fuegonegro. Doce mineros bajaron hace una semana y ninguno ha vuelto. La capataz Marga os espera en la taberna con un mapa viejo y una bolsa de monedas.',
     nodos: [
       // Sesión 1: la entrada
       escena('1', 'Villahollín',

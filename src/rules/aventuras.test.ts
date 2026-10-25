@@ -61,6 +61,9 @@ for (const a of Object.values(AVENTURAS)) {
       if (variable && /^\w+$/.test(variable)) assert.ok(variable in a.variables, `condición sobre variable inexistente: ${fl.condicion}`);
     }
     assert.ok(imagenesDeCampana(a.id, a.diagrama, []).length >= 8, 'lista de imágenes');
+    const intro = a.diagrama.introduccion ?? '';
+    assert.match(intro, /\{heroes\}/, 'introducción con {heroes}');
+    assert.ok(intro.split(/[.!?»]\s/).length >= 3 && intro.split(/[.!?»]\s/).length <= 6, 'introducción de 3-5 frases');
   });
 }
 

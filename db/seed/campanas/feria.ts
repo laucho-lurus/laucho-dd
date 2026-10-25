@@ -7,6 +7,8 @@ export const feria: SemillaCampana = {
   resumen: 'Corta, nivel 1-2 (una sesión): durante la feria de Puertoclaro roban la Lágrima de Plata, el collar que la ciudad regalará al duque. Hay que encontrarla antes del anochecer.',
   variables: { pista_espejo: false, pista_carro: false, ladron_identificado: false },
   diagrama: {
+    introduccion:
+      '{heroes} pasean por la plaza mayor de Puertoclaro, donde la feria de los Espejos ha llenado todo de farolillos, música y olor a almendras. Esta noche llega el duque y la ciudad le regalará la Lágrima de Plata, un collar de valor incalculable. Una mujer de toga gris se abre paso entre la multitud hacia vosotros con cara de no haber dormido. Algo ha salido muy mal, y solo quedan unas horas hasta el ocaso.',
     nodos: [
       escena('1', 'La feria llega a Puertoclaro',
         'Farolillos, tambores y olor a almendras tostadas llenan la plaza mayor. Entre la multitud, una mujer de toga gris os hace una seña urgente.',
