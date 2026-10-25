@@ -5,7 +5,8 @@ import { cripta } from './cripta.ts';
 import { feria } from './feria.ts';
 import { rey } from './rey.ts';
 import { minas } from './minas.ts';
+import { mar } from './mar.ts';
 
 export const AVENTURAS: Readonly<Record<string, SemillaCampana>> = Object.fromEntries(
-  [molino, cripta, feria, rey, minas].map((a) => [a.id, a]),
+  [molino, cripta, feria, rey, minas, mar].map((a) => [a.id, a]),
 );
