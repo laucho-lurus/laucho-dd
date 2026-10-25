@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { ALINEAMIENTOS, CLASES, METODOS, RAZAS } from '../rules/personaje.ts';
 import { crearPersonaje, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
 import type { Repositorio } from './repositorio.ts';
+import { DIFICULTADES, validarPerfil, type Perfiles } from '../ia/perfiles.ts';
 
 const UPLOADS = new URL('../../uploads/', import.meta.url);
 const MAX_CUERPO_BYTES = Math.ceil(MAX_IMAGEN_BYTES * 1.4) + 64 * 1024; // base64 + resto del formulario
@@ -24,13 +25,14 @@ async function leerJson(req: IncomingMessage): Promise<unknown> {
     if (total > MAX_CUERPO_BYTES) throw new CuerpoDemasiadoGrande();
     partes.push(parte as Buffer);
   }
-  return JSON.parse(Buffer.concat(partes).toString('utf8'));
+  const crudo = Buffer.concat(partes).toString('utf8');
+  return JSON.parse(crudo) as unknown;
 }
 
 const opciones = (tabla: Readonly<Record<string, { nombre: string }>>) =>
   Object.entries(tabla).map(([clave, v]) => ({ clave, ...v }));
 
-export function crearApi(repo: Repositorio) {
+export function crearApi(repo: Repositorio, perfiles: Perfiles) {
   const deps: Dependencias = {
     repo,
     tiradas: new TiradasCaracteristicas(),
@@ -51,6 +53,31 @@ export function crearApi(repo: Repositorio) {
           metodos: METODOS,
           campanas: (await repo.listarCampanas()).map(({ id, nombre }) => ({ id, nombre })),
         });
+        return true;
+      }
+      if (req.method === 'GET' && ruta === '/api/perfiles') {
+        json(res, 200, { perfiles: await perfiles.listar(), dificultades: DIFICULTADES });
+        return true;
+      }
+      if (req.method === 'POST' && ruta === '/api/perfiles') {
+        let cuerpo: Record<string, unknown>;
+        try {
+          cuerpo = (await leerJson(req)) as Record<string, unknown>;
+        } catch {
+          json(res, 400, { error: 'Petición inválida' });
+          return true;
+        }
+        const v = validarPerfil(cuerpo);
+        if (!v.ok) {
+          json(res, 400, { error: v.error });
+          return true;
+        }
+        const id = typeof cuerpo?.id === 'string' && cuerpo.id ? cuerpo.id : null;
+        if (id && !(await perfiles.buscar(id))) {
+          json(res, 404, { error: 'No existe ese perfil' });
+          return true;
+        }
+        json(res, id ? 200 : 201, { perfil: await perfiles.guardarPerfil(id, v.perfil) });
         return true;
       }
       if (req.method === 'POST' && ruta === '/api/caracteristicas/tirar') {

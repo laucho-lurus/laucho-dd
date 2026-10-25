@@ -6,6 +6,8 @@ import { RepositorioPg } from './repositorio-pg.ts';
 import { RepositorioMixto } from './repositorio-mixto.ts';
 import { CAMPANA_DEMO_ID, DATOS_DEMO } from './demo.ts';
 import type { Repositorio } from './repositorio.ts';
+import { ARCHIVO_PERFILES, crearGmIa } from '../ia/config.ts';
+import { Perfiles } from '../ia/perfiles.ts';
 
 // Uso:
 //   node src/server/main.ts --memoria              → datos de demo en memoria
@@ -40,7 +42,10 @@ async function repositorio(): Promise<Repositorio> {
 
 try {
   const repo = await repositorio();
-  crearServidor(new Gestor(repo), crearApi(repo)).listen(PUERTO, () => console.log(`Servidor de salas en http://localhost:${PUERTO}`));
+  const { gm, info } = crearGmIa(process.env);
+  console.log(info);
+  const perfiles = new Perfiles(ARCHIVO_PERFILES);
+  crearServidor(new Gestor(repo, undefined, { gm, perfiles }), crearApi(repo, perfiles)).listen(PUERTO, () => console.log(`Servidor de salas en http://localhost:${PUERTO}`));
 } catch (err) {
   console.error('No se pudo arrancar:', (err as Error).message);
   process.exit(1);
