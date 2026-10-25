@@ -172,7 +172,7 @@ async function crear() {
     if (!r.ok) return aviso(datos.error ?? 'No se pudo crear el personaje.');
     const p = datos.personaje;
     $('nombre').value = ''; // evita crearlo dos veces sin querer
-    aviso(`¡${p.nombre} está listo! ${p.raza} ${p.clase}, ${p.pg_max} PG, CA ${p.datos.ca}. Ya puedes elegirlo al unirte a una sala.`, 'exito-creacion');
+    aviso(`Personaje creado ✓ ${p.nombre}: ${p.raza} ${p.clase}, ${p.pg_max} PG, CA ${p.datos.ca}. Ya puedes elegirlo al unirte a una sala.`, 'exito-creacion');
     if ($('metodo').value === 'aleatorio') cambiarMetodo(); // la tirada ya se usó
   } catch {
     aviso('No se pudo conectar con el servidor.');
