@@ -127,3 +127,4 @@ input, select, textarea {
 .ajuste-pg button { padding: 2px 6px; font-size: .8rem; }
 .narracion .exito { color: #3f6e22; font-weight: 600; }
 .narracion .fracaso { color: #9a3226; font-weight: 600; }
+.pedir .ayuda { flex-basis: 100%; color: var(--tenue); font-size: .75rem; }

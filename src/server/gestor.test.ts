@@ -153,6 +153,15 @@ test('con CD el resultado dice éxito o fracaso, y la CD no se difunde', async (
   assert.equal(gm.ultimo().evento.datos.exito, false);
 });
 
+test('pedir un chequeo calcula notación y motivo con la ficha del personaje', async () => {
+  const { gestor, gm, codigo } = await salaConGm();
+  const a = await jugador(gestor, codigo, PJ[1]); // Torvald: FUE 16, SAB 11
+  await gm.enviar({ tipo: 'pedir_tirada', personaje_id: PJ[1], chequeo: 'atletismo' });
+  assert.deepEqual(a.ultimo().estado.jugadores[0].tirada_pendiente, { notacion: '1d20+3', motivo: 'Atletismo' });
+  await gm.enviar({ tipo: 'pedir_tirada', personaje_id: PJ[1], chequeo: 'nadar' });
+  assert.equal(gm.ultimo().mensaje, 'Habilidad o salvación desconocida');
+});
+
 test('solo el GM pide tiradas', async () => {
   const { gestor, codigo } = await salaConGm();
   const a = await jugador(gestor, codigo, PJ[0]);

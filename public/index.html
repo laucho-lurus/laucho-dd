@@ -55,11 +55,59 @@
     </div>
     <div id="pedir" class="fila pedir" hidden>
       <span class="etiqueta">Pedir tirada a</span>
-      <select id="pedir-a"></select>
-      <input id="pedir-notacion" value="1d20" size="7" aria-label="Notación">
-      <input id="pedir-motivo" placeholder="Motivo (Percepción)" size="16">
-      <input id="pedir-cd" type="number" min="1" max="40" placeholder="CD" aria-label="CD (solo la ves tú)">
+      <select id="pedir-a" aria-label="Jugador"></select>
+      <select id="pedir-tipo" aria-label="Tirada">
+        <optgroup label="Habilidad">
+          <option value="chequeo:acrobacias">Acrobacias</option>
+          <option value="chequeo:arcanos">Arcanos</option>
+          <option value="chequeo:atletismo">Atletismo</option>
+          <option value="chequeo:engano">Engaño</option>
+          <option value="chequeo:historia">Historia</option>
+          <option value="chequeo:interpretacion">Interpretación</option>
+          <option value="chequeo:intimidacion">Intimidación</option>
+          <option value="chequeo:investigacion">Investigación</option>
+          <option value="chequeo:juego_de_manos">Juego de manos</option>
+          <option value="chequeo:medicina">Medicina</option>
+          <option value="chequeo:naturaleza">Naturaleza</option>
+          <option value="chequeo:percepcion">Percepción</option>
+          <option value="chequeo:perspicacia">Perspicacia</option>
+          <option value="chequeo:persuasion">Persuasión</option>
+          <option value="chequeo:religion">Religión</option>
+          <option value="chequeo:sigilo">Sigilo</option>
+          <option value="chequeo:supervivencia">Supervivencia</option>
+          <option value="chequeo:trato_con_animales">Trato con animales</option>
+        </optgroup>
+        <optgroup label="Salvación">
+          <option value="chequeo:salvacion_fue">Salvación de Fuerza</option>
+          <option value="chequeo:salvacion_des">Salvación de Destreza</option>
+          <option value="chequeo:salvacion_con">Salvación de Constitución</option>
+          <option value="chequeo:salvacion_int">Salvación de Inteligencia</option>
+          <option value="chequeo:salvacion_sab">Salvación de Sabiduría</option>
+          <option value="chequeo:salvacion_car">Salvación de Carisma</option>
+        </optgroup>
+        <optgroup label="Dado suelto">
+          <option value="dado:1d20">d20</option>
+          <option value="dado:1d12">d12</option>
+          <option value="dado:1d10">d10</option>
+          <option value="dado:1d8">d8</option>
+          <option value="dado:1d6">d6</option>
+          <option value="dado:1d4">d4</option>
+        </optgroup>
+          <option value="libre">Personalizada…</option>
+      </select>
+      <input id="pedir-notacion" placeholder="2d6+3" size="7" aria-label="Notación" hidden>
+      <input id="pedir-motivo" placeholder="Motivo (opcional)" size="14" hidden>
+      <select id="pedir-cd-tipo" aria-label="CD">
+        <option value="">Sin CD</option>
+        <option value="10">Fácil (10)</option>
+        <option value="15" selected>Media (15)</option>
+        <option value="20">Difícil (20)</option>
+        <option value="25">Muy difícil (25)</option>
+        <option value="libre">Personalizada…</option>
+      </select>
+      <input id="pedir-cd" type="number" min="1" max="40" placeholder="CD" aria-label="CD personalizada" hidden>
       <button id="pedir-enviar" class="secundario">Pedir</button>
+      <small class="ayuda">CD = Clase de Dificultad: el número que la tirada debe igualar o superar. Solo la ves tú.</small>
     </div>
     <div id="dados-libres" class="fila dados">
       <button data-dado="1d20">d20</button>

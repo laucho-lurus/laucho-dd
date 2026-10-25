@@ -122,14 +122,24 @@ function tirar(notacion) {
 document.querySelectorAll('[data-dado]').forEach((b) => b.addEventListener('click', () => tirar(b.dataset.dado)));
 $('tirar').addEventListener('click', () => tirar($('notacion').value.trim()));
 $('tirar-peticion').addEventListener('click', () => peticion && tirar(peticion.notacion));
-$('pedir-enviar').addEventListener('click', () => {
-  const cd = parseInt($('pedir-cd').value, 10);
-  servidor.enviar({
-    tipo: 'pedir_tirada',
-    personaje_id: $('pedir-a').value,
-    notacion: $('pedir-notacion').value.trim(),
-    motivo: $('pedir-motivo').value.trim() || undefined,
-    cd: Number.isNaN(cd) ? undefined : cd,
-  });
+$('pedir-tipo').addEventListener('change', () => {
+  const tipo = $('pedir-tipo').value;
+  $('pedir-notacion').hidden = tipo !== 'libre';
+  $('pedir-motivo').hidden = tipo.startsWith('chequeo:');
 });
+$('pedir-cd-tipo').addEventListener('change', () => {
+  $('pedir-cd').hidden = $('pedir-cd-tipo').value !== 'libre';
+});
+
+/** Mensaje pedir_tirada según los dropdowns: chequeo (el servidor calcula la notación), dado suelto o libre. */
+function peticionElegida() {
+  const tipo = $('pedir-tipo').value;
+  const cdElegida = $('pedir-cd-tipo').value;
+  const cd = parseInt(cdElegida === 'libre' ? $('pedir-cd').value : cdElegida, 10);
+  const base = { tipo: 'pedir_tirada', personaje_id: $('pedir-a').value, cd: Number.isNaN(cd) ? undefined : cd };
+  if (tipo.startsWith('chequeo:')) return { ...base, chequeo: tipo.slice('chequeo:'.length) };
+  const notacion = tipo === 'libre' ? $('pedir-notacion').value.trim() : tipo.slice('dado:'.length);
+  return { ...base, notacion, motivo: $('pedir-motivo').value.trim() || undefined };
+}
+$('pedir-enviar').addEventListener('click', () => servidor.enviar(peticionElegida()));
 $('turno').addEventListener('click', () => servidor.enviar({ tipo: 'siguiente_turno' }));

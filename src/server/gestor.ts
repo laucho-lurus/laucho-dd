@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { roll } from '../rules/dice.ts';
+import { tiradaDeChequeo } from '../rules/habilidades.ts';
 import { generarCodigo } from './codigo.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
@@ -187,15 +188,24 @@ export class Gestor {
       }
       case 'pedir_tirada': {
         soloGm(quien);
-        tirar(m.notacion); // valida la notación antes de dejarla pendiente
-        const peticion = { notacion: m.notacion, motivo: m.motivo ?? null, cd: m.cd ?? null };
+        const destino = sala.personaje(m.personaje_id);
+        if (!destino) throw new ErrorDeJuego('Ese personaje no está en la sala');
+        let notacion = m.notacion!;
+        let motivo = m.motivo ?? null;
+        if (m.chequeo) {
+          const t = tiradaDeChequeo(m.chequeo, destino.caracteristicas);
+          if (!t) throw new ErrorDeJuego('Habilidad o salvación desconocida');
+          notacion = t.notacion;
+          motivo = t.motivo;
+        }
+        tirar(notacion); // valida la notación antes de dejarla pendiente
+        const peticion = { notacion, motivo, cd: m.cd ?? null };
         const r = sala.pedirTirada(m.personaje_id, peticion);
         if (!r.ok) throw new ErrorDeJuego(r.error);
-        const destino = sala.personaje(m.personaje_id)!.nombre;
         return this.publicar(sala, 'estado', autor, {
           cambio: 'pedir_tirada',
           personaje_id: m.personaje_id,
-          personaje_nombre: destino,
+          personaje_nombre: destino.nombre,
           notacion: peticion.notacion,
           motivo: peticion.motivo,
         });

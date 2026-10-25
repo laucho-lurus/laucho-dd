@@ -14,7 +14,7 @@ export type MensajeCliente =
   | { tipo: 'narracion'; texto: string }
   | { tipo: 'tirar'; notacion: string; motivo?: string }
   | { tipo: 'definir_orden'; orden: string[] }
-  | { tipo: 'pedir_tirada'; personaje_id: string; notacion: string; motivo?: string; cd?: number }
+  | { tipo: 'pedir_tirada'; personaje_id: string; notacion?: string; chequeo?: string; motivo?: string; cd?: number }
   | { tipo: 'aplicar_pg'; personaje_id: string; cantidad: number }
   | { tipo: 'siguiente_turno' }
   | { tipo: 'estado' };
@@ -102,13 +102,16 @@ export function validarMensaje(crudo: string): Validacion {
     case 'pedir_tirada': {
       const personaje_id = texto(m, 'personaje_id', MAX_ID);
       if (esError(personaje_id)) return falla(personaje_id.error);
-      const notacion = texto(m, 'notacion', MAX_NOTACION);
+      // O un chequeo ("percepcion", "salvacion_des") o una notación libre.
+      const chequeo = m.chequeo === undefined ? undefined : texto(m, 'chequeo', MAX_ID);
+      if (esError(chequeo)) return falla(chequeo.error);
+      const notacion = chequeo ? undefined : texto(m, 'notacion', MAX_NOTACION);
       if (esError(notacion)) return falla(notacion.error);
       const motivo = m.motivo === undefined || m.motivo === '' ? undefined : texto(m, 'motivo', MAX_ID * 2);
       if (esError(motivo)) return falla(motivo.error);
       const cd = entero(m, 'cd', 1, MAX_CD);
       if (esError(cd)) return falla(cd.error);
-      return bien({ tipo: 'pedir_tirada', personaje_id, notacion, ...(motivo && { motivo }), ...(cd !== undefined && { cd }) });
+      return bien({ tipo: 'pedir_tirada', personaje_id, ...(chequeo ? { chequeo } : { notacion }), ...(motivo && { motivo }), ...(cd !== undefined && { cd }) });
     }
     case 'aplicar_pg': {
       const personaje_id = texto(m, 'personaje_id', MAX_ID);
