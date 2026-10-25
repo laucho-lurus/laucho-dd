@@ -115,3 +115,15 @@ input, select, textarea {
   }
   .narracion { padding: 16px; }
 }
+
+/* Tiradas pedidas y PG */
+.peticion { background: var(--madera-clara); border: 1px solid var(--oro); border-radius: 6px; padding: 6px 10px; }
+.pedir .etiqueta { color: var(--tenue); font-size: .85rem; }
+#pedir-cd { width: 64px; }
+.retrato.inconsciente .circulo { border-color: var(--herida); filter: grayscale(1); }
+.retrato .estado-pg { font-size: .7rem; color: #f0907e; }
+.ajuste-pg { display: flex; gap: 2px; }
+.ajuste-pg input { width: 40px; padding: 2px; font-size: .75rem; text-align: center; }
+.ajuste-pg button { padding: 2px 6px; font-size: .8rem; }
+.narracion .exito { color: #3f6e22; font-weight: 600; }
+.narracion .fracaso { color: #9a3226; font-weight: 600; }

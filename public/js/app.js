@@ -57,7 +57,8 @@ function entrar(rol, nuevoEstado, historial) {
   miRol = rol;
   $('entrada').hidden = true;
   $('mesa').hidden = false;
-  $('turno').hidden = rol.rol !== 'gm';
+  const esGm = rol.rol === 'gm';
+  $('turno').hidden = $('pedir').hidden = $('dados-libres').hidden = !esGm;
   $('texto').placeholder = rol.rol === 'gm' ? 'Narra la escena…' : '¿Qué haces?';
   actualizar(nuevoEstado);
   historial.forEach((e) => agregarEvento(e, nombreDe));
@@ -65,9 +66,26 @@ function entrar(rol, nuevoEstado, historial) {
 
 function actualizar(nuevoEstado) {
   estado = nuevoEstado;
-  pintarRetratos(estado);
+  const esGm = miRol?.rol === 'gm';
+  pintarRetratos(estado, esGm ? (personaje_id, cantidad) => servidor.enviar({ tipo: 'aplicar_pg', personaje_id, cantidad }) : null);
+  if (esGm) actualizarSelectorPedir();
+  else mostrarPeticion(estado.jugadores.find((j) => j.personaje_id === miRol?.personaje_id)?.tirada_pendiente);
   const id = estado.turno_de ?? miRol?.personaje_id;
   pintarFicha(estado.jugadores.find((j) => j.personaje_id === id) ?? estado.jugadores[0]);
+}
+
+function actualizarSelectorPedir() {
+  const sel = $('pedir-a');
+  const elegido = sel.value;
+  sel.replaceChildren(...estado.jugadores.map((j) => new Option(j.nombre, j.personaje_id)));
+  if (elegido) sel.value = elegido;
+}
+
+let peticion = null;
+function mostrarPeticion(p) {
+  peticion = p ?? null;
+  $('peticion').hidden = !peticion;
+  if (peticion) $('texto-peticion').textContent = `El GM te pide una tirada${peticion.motivo ? ` de ${peticion.motivo}` : ''} (${peticion.notacion})`;
 }
 
 const codigoEscrito = () => $('codigo').value.replace(/\s/g, '').toUpperCase();
@@ -103,4 +121,15 @@ function tirar(notacion) {
 }
 document.querySelectorAll('[data-dado]').forEach((b) => b.addEventListener('click', () => tirar(b.dataset.dado)));
 $('tirar').addEventListener('click', () => tirar($('notacion').value.trim()));
+$('tirar-peticion').addEventListener('click', () => peticion && tirar(peticion.notacion));
+$('pedir-enviar').addEventListener('click', () => {
+  const cd = parseInt($('pedir-cd').value, 10);
+  servidor.enviar({
+    tipo: 'pedir_tirada',
+    personaje_id: $('pedir-a').value,
+    notacion: $('pedir-notacion').value.trim(),
+    motivo: $('pedir-motivo').value.trim() || undefined,
+    cd: Number.isNaN(cd) ? undefined : cd,
+  });
+});
 $('turno').addEventListener('click', () => servidor.enviar({ tipo: 'siguiente_turno' }));

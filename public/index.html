@@ -49,7 +49,19 @@
       <textarea id="texto" rows="2" placeholder="¿Qué haces?"></textarea>
       <button id="enviar">Enviar</button>
     </div>
-    <div class="fila dados">
+    <div id="peticion" class="fila peticion" hidden>
+      <span id="texto-peticion"></span>
+      <button id="tirar-peticion">🎲 Tirar</button>
+    </div>
+    <div id="pedir" class="fila pedir" hidden>
+      <span class="etiqueta">Pedir tirada a</span>
+      <select id="pedir-a"></select>
+      <input id="pedir-notacion" value="1d20" size="7" aria-label="Notación">
+      <input id="pedir-motivo" placeholder="Motivo (Percepción)" size="16">
+      <input id="pedir-cd" type="number" min="1" max="40" placeholder="CD" aria-label="CD (solo la ves tú)">
+      <button id="pedir-enviar" class="secundario">Pedir</button>
+    </div>
+    <div id="dados-libres" class="fila dados">
       <button data-dado="1d20">d20</button>
       <button data-dado="1d12">d12</button>
       <button data-dado="1d8">d8</button>
@@ -57,9 +69,9 @@
       <button data-dado="1d4">d4</button>
       <input id="notacion" placeholder="2d6+3" size="7">
       <button id="tirar">Tirar</button>
-      <div id="dado" class="dado" aria-live="polite"><span class="cara">🎲</span><span class="resultado"></span></div>
       <button id="turno" class="secundario" hidden>Siguiente turno ▸</button>
     </div>
+    <div id="dado" class="dado" aria-live="polite"><span class="cara">🎲</span><span class="resultado"></span></div>
   </footer>
 </div>
 

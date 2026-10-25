@@ -16,9 +16,13 @@ const modificador = (valor) => {
 };
 const NOMBRES_CAR = { fue: 'FUE', des: 'DES', con: 'CON', int: 'INT', sab: 'SAB', car: 'CAR' };
 
-export function pintarRetratos(estado) {
+const cantidades = new Map(); // personaje_id → cantidad escrita por el GM (sobrevive al repintado)
+
+/** `alAjustarPg(id, cantidad)` solo se pasa al GM: agrega los botones −/+. */
+export function pintarRetratos(estado, alAjustarPg) {
   const retratos = estado.jugadores.map((j) => {
     const r = el('div', 'retrato');
+    r.classList.toggle('inconsciente', j.inconsciente);
     r.classList.toggle('turno', j.personaje_id === estado.turno_de);
     r.classList.toggle('desconectado', !j.conectado);
     r.title = `${j.nombre} — ${j.pg_actual}/${j.pg_max} PG`;
@@ -29,12 +33,35 @@ export function pintarRetratos(estado) {
     barra.style.width = `${porcentaje}%`;
     vida.append(barra);
     r.append(el('div', 'circulo', iniciales(j.nombre)), el('div', 'nombre', j.nombre), vida);
+    if (j.inconsciente) r.append(el('div', 'estado-pg', 'Inconsciente'));
+    if (alAjustarPg) r.append(ajustePg(j.personaje_id, alAjustarPg));
     return r;
   });
   $('retratos').replaceChildren(...retratos);
   $('titulo-campana').textContent = estado.campana.nombre;
   $('codigo-sala').textContent = estado.codigo;
   $('ronda').textContent = estado.ronda;
+}
+
+function ajustePg(id, alAjustarPg) {
+  const caja = el('div', 'ajuste-pg');
+  const cantidad = el('input');
+  cantidad.type = 'number';
+  cantidad.min = '1';
+  cantidad.value = cantidades.get(id) ?? '1';
+  cantidad.setAttribute('aria-label', 'Cantidad de PG');
+  cantidad.addEventListener('input', () => cantidades.set(id, cantidad.value));
+  const boton = (signo, texto, titulo) => {
+    const b = el('button', 'secundario', texto);
+    b.title = titulo;
+    b.addEventListener('click', () => {
+      const n = Math.abs(parseInt(cantidad.value, 10));
+      if (n) alAjustarPg(id, signo * n);
+    });
+    return b;
+  };
+  caja.append(boton(-1, '−', 'Daño'), cantidad, boton(1, '+', 'Curación'));
+  return caja;
 }
 
 export function pintarFicha(jugador) {
@@ -84,7 +111,9 @@ export function agregarEvento(evento, nombreDe) {
       p.prepend(el('span', 'quien', `${quien}:`));
       break;
     case 'tirada':
-      p = el('p', 'tirada', `🎲 ${quien} tira ${d.notation}${d.motivo ? ` (${d.motivo})` : ''}: ${desglose(d)}`);
+      p = el('p', 'tirada', `🎲 ${quien} tira ${d.notation}${d.motivo ? ` (${d.motivo})` : ''}: ${desglose(d)} `);
+      if (d.exito === true) p.append(el('span', 'exito', '¡Éxito!'));
+      if (d.exito === false) p.append(el('span', 'fracaso', 'Fracaso'));
       break;
     default:
       p = el('p', 'sistema', textoDeEstado(d, nombreDe));
@@ -102,6 +131,11 @@ export function desglose(tirada) {
 
 function textoDeEstado(d, nombreDe) {
   if (d.cambio === 'entra') return `${d.personaje_nombre} se sienta a la mesa.`;
+  if (d.cambio === 'pedir_tirada') return `El GM pide a ${d.personaje_nombre} una tirada${d.motivo ? ` de ${d.motivo}` : ''} (${d.notacion}).`;
+  if (d.cambio === 'pg') {
+    const verbo = d.cantidad < 0 ? `recibe ${-d.cantidad} de daño` : `recupera ${d.cantidad} PG`;
+    return `${d.personaje_nombre} ${verbo} (${d.pg_actual} PG)${d.inconsciente ? ' y cae inconsciente' : ''}.`;
+  }
   if (d.cambio === 'turno') return `— Turno de ${nombreDe(d.turno_de)} · ronda ${d.ronda} —`;
   return '— Nuevo orden de turnos —';
 }
