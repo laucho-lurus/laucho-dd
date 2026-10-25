@@ -112,7 +112,15 @@ export function pintarFicha(jugador) {
     li.append(el('small', '', `${a.ataque} · ${a.dano}`));
     armas.append(li);
   }
+  const retrato = [];
+  if (jugador.imagen_url) {
+    const img = el('img', 'ficha-retrato');
+    img.src = jugador.imagen_url;
+    img.alt = `Retrato de ${jugador.nombre}`;
+    retrato.push(img);
+  }
   ficha.replaceChildren(
+    ...retrato,
     el('h2', '', jugador.nombre),
     el('div', 'sub', `${jugador.raza} · ${jugador.clase} ${jugador.nivel}`),
     vitales,
