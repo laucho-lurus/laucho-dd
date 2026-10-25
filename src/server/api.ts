@@ -68,8 +68,13 @@ export function crearApi(repo: Repositorio) {
           return true;
         }
         const r = await crearPersonaje(deps, cuerpo);
-        if (r.ok) json(res, 201, { personaje: r.valor });
-        else json(res, 400, { error: r.error });
+        if (r.ok) {
+          console.log(`[api] personaje creado: ${r.valor.nombre} (campaña ${r.valor.campana_id})`);
+          json(res, 201, { personaje: r.valor });
+        } else {
+          console.warn(`[api] creación de personaje rechazada: ${r.error}`);
+          json(res, 400, { error: r.error });
+        }
         return true;
       }
       const subido = req.method === 'GET' ? ARCHIVO_SUBIDO.exec(ruta) : null;

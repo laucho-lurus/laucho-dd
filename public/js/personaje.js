@@ -16,6 +16,7 @@ const conSigno = (n) => (n >= 0 ? `+${n}` : `${n}`);
 const aviso = (texto, clase = 'aviso') => {
   $('aviso').className = clase;
   $('aviso').textContent = texto;
+  if (texto) $('aviso').scrollIntoView({ behavior: 'smooth', block: 'center' }); // el aviso está al pie del formulario
 };
 
 const llenar = (select, items) => select.replaceChildren(...items.map(([valor, texto]) => new Option(texto, valor)));
@@ -148,6 +149,7 @@ async function crear() {
   const caracteristicas = valoresBase();
   if (Object.values(caracteristicas).some((v) => v === null)) return aviso('Asigna un valor a cada característica.');
   $('crear').disabled = true;
+  aviso('Creando…', 'pool');
   try {
     const r = await fetch('/api/personajes', {
       method: 'POST',
@@ -169,6 +171,7 @@ async function crear() {
     const datos = await r.json();
     if (!r.ok) return aviso(datos.error ?? 'No se pudo crear el personaje.');
     const p = datos.personaje;
+    $('nombre').value = ''; // evita crearlo dos veces sin querer
     aviso(`¡${p.nombre} está listo! ${p.raza} ${p.clase}, ${p.pg_max} PG, CA ${p.datos.ca}. Ya puedes elegirlo al unirte a una sala.`, 'exito-creacion');
     if ($('metodo').value === 'aleatorio') cambiarMetodo(); // la tirada ya se usó
   } catch {
