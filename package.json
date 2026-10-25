@@ -6,7 +6,7 @@
   "description": "D&D 5e multijugador con GM IA o humano",
   "scripts": {
     "start": "node --env-file=.env src/server/main.ts",
-    "dev": "node --watch src/server/main.ts --memoria",
+    "dev": "node --env-file-if-exists=.env --watch src/server/main.ts --memoria",
     "dev:neon": "node --env-file=.env --watch src/server/main.ts --demo",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc",
