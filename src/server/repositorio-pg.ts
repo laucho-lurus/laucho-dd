@@ -152,7 +152,7 @@ export class RepositorioPg implements Repositorio {
     const con001 = await this.tieneMigracion001();
     const extra = (con001 ? ', variables, ia_pausada, ia_perfil_id' : '') + ((await this.tieneMigracion002()) ? ', gm_token_hash' : '');
     const r = await this.pool.query<Sesion>(
-      `select id, codigo, campana_id, estado, nodo_actual${extra} from sesiones where codigo = $1`,
+      `select id, codigo, campana_id, estado, nodo_actual, resumen as introduccion${extra} from sesiones where codigo = $1`,
       [codigo],
     );
     const s = r.rows[0];
@@ -162,11 +162,11 @@ export class RepositorioPg implements Repositorio {
   async guardarEstadoSesion(sesionId: string, e: EstadoSesion) {
     if (await this.tieneMigracion001()) {
       await this.pool.query(
-        'update sesiones set nodo_actual = $2, variables = $3, ia_pausada = $4, ia_perfil_id = $5 where id = $1',
-        [sesionId, e.nodo_actual, JSON.stringify(e.variables), e.ia_pausada, e.ia_perfil_id],
+        'update sesiones set nodo_actual = $2, variables = $3, ia_pausada = $4, ia_perfil_id = $5, resumen = $6 where id = $1',
+        [sesionId, e.nodo_actual, JSON.stringify(e.variables), e.ia_pausada, e.ia_perfil_id, e.introduccion],
       );
     } else {
-      await this.pool.query('update sesiones set nodo_actual = $2 where id = $1', [sesionId, e.nodo_actual]);
+      await this.pool.query('update sesiones set nodo_actual = $2, resumen = $3 where id = $1', [sesionId, e.nodo_actual, e.introduccion]);
     }
   }
 

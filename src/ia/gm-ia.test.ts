@@ -24,6 +24,7 @@ const contexto = (): Contexto => ({
   jugadores: [jugador],
   eventos: [],
   permitir_pg: true,
+  introduccion: null,
   monstruos: [],
   criaturas: [{ srd_clave: 'kobold', nombre: 'Kobold' }],
 });

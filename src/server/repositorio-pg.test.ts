@@ -89,13 +89,13 @@ const columnasSesiones = () => {
   return [...columnas('sesiones').todas, ...[...migraciones.matchAll(/add column if not exists (\w+)/g)].map((m) => m[1])];
 };
 
-const estado = { nodo_actual: '2', variables: { llave_palomar: true }, ia_pausada: true, ia_perfil_id: null };
+const estado = { nodo_actual: '2', variables: { llave_palomar: true }, ia_pausada: true, ia_perfil_id: null, introduccion: '{heroes} llegan.' };
 
 test('guardarEstadoSesion con la migración 001 guarda todo, y las columnas existen', async () => {
   const { repo, consultas } = repoFalso();
   await repo.guardarEstadoSesion('s1', estado);
   const cols = [...consultas[0].sql.matchAll(/(\w+) = \$/g)].map((m) => m[1]);
-  assert.deepEqual(cols, ['nodo_actual', 'variables', 'ia_pausada', 'ia_perfil_id', 'id']);
+  assert.deepEqual(cols, ['nodo_actual', 'variables', 'ia_pausada', 'ia_perfil_id', 'resumen', 'id']);
   for (const c of cols) assert.ok(columnasSesiones().includes(c), c);
   assert.deepEqual(await repo.avisosBase(), []);
 });
@@ -103,7 +103,7 @@ test('guardarEstadoSesion con la migración 001 guarda todo, y las columnas exis
 test('sin la migración 001 solo guarda el nodo y avisa', async () => {
   const { repo, consultas } = repoFalso([]);
   await repo.guardarEstadoSesion('s1', estado);
-  assert.match(consultas[0].sql, /set nodo_actual = \$2 where id = \$1$/);
+  assert.match(consultas[0].sql, /set nodo_actual = \$2, resumen = \$3 where id = \$1$/);
   assert.match((await repo.avisosBase())[0], /migración 001/);
   await repo.buscarSesionPorCodigo('ABCDEF');
   assert.doesNotMatch(consultas.at(-1)!.sql, /variables/);

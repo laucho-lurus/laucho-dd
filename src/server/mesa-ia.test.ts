@@ -427,6 +427,7 @@ test('3b: flechas con efectos y condición, monstruos del nodo de combate y cont
     nombre: 'Prueba del editor',
     variables: { llave: false, alarma: false },
     diagrama: {
+      introduccion: '{heroes} llegan a la puerta.',
       nodos: [
         { id: '1', tipo: 'tirada', titulo: 'La puerta', texto: '', notas: '', chequeo: 'atletismo', cd: 14 },
         { id: '2', tipo: 'combate', titulo: 'Emboscada', texto: '', notas: '', monstruos: [{ srd_clave: 'kobold', cantidad: 2 }] },
@@ -544,4 +545,42 @@ test('imágenes en partida: el monstruo lleva su imagen, oculta bajo la niebla; 
   await jugador.enviar({ tipo: 'mostrar_imagen', url: panel.imagenes_nodo[0].url });
   assert.equal(jugador.ultimo().mensaje, 'Solo el GM puede hacer eso');
   void codigo;
+});
+
+test('introducción: el GM la muestra con los nombres reales, puede editarla y la IA la recibe como contexto', async () => {
+  const { gestor, humano, jugador, codigo, llamadas } = await mesa([respuesta([usar('narrar', { texto: 'La mina os espera.' })], 'end_turn')]);
+  // narrar_escena la muestra antes de la primera narración (sin coste) y la IA la recibe como ya leída
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  const intro = eventos(jugador).find((e) => e.datos.cambio === 'introduccion');
+  assert.match(intro.datos.texto, /^Brisa esperan en la plaza de Piedragris/);
+  assert.match(llamadas[0].messages[0].content as string, /Introducción \(ya leída a los jugadores; no la repitas ni la contradigas\): Brisa esperan/);
+  assert.equal(llamadas.length, 1);
+  // editada por el GM para esta sesión y vuelta a mostrar
+  await humano.enviar({ tipo: 'mostrar_introduccion', texto: '{heroes} despiertan en una celda. {héroe_1} tiene la llave.' });
+  assert.equal(eventos(jugador).at(-1).datos.texto, 'Brisa despiertan en una celda. Brisa tiene la llave.');
+  await jugador.enviar({ tipo: 'mostrar_introduccion' });
+  assert.equal(jugador.ultimo().mensaje, 'Solo el GM puede hacer eso');
+});
+
+test('introducción: si la campaña no tiene, la IA la escribe una vez y se guarda en la sesión', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'intro-ia-'));
+  const repo = new RepositorioMemoria({ campanas: [{ id: 'sin', nombre: 'Sin intro', resumen: 'Ratas en el sótano.', diagrama: { nodos: [{ id: '1', tipo: 'escena', titulo: 'El sótano', texto: 'Huele a queso.', notas: '' }], flechas: [] } }] });
+  const llamadas: Anthropic.MessageCreateParamsNonStreaming[] = [];
+  const cliente: ClienteIa = { crear: async (p) => (llamadas.push(p), { content: [{ type: 'text', text: '{heroes} bajan al sótano de la posada del Queso Feliz.' }], stop_reason: 'end_turn', usage: { input_tokens: 50, output_tokens: 20 } } as unknown as Anthropic.Message) };
+  const opciones = () => ({ gm: new GmIa({ cliente, presupuesto: new Presupuesto(join(dir, 'g.json'), 5) }), perfiles: new Perfiles(join(dir, 'p.json')) });
+  const g1 = new Gestor(repo, () => {}, opciones());
+  const r: Msj[] = [];
+  await g1.conectar({ enviar: (m) => r.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: 'sin', gm_perfil_id: 'cronista' }));
+  const codigo = r.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  await g1.esperarIa(codigo);
+  assert.equal(llamadas.length, 1);
+  assert.equal(llamadas[0].max_tokens, 300);
+  assert.equal(llamadas[0].tools, undefined);
+  assert.equal(r.filter((m) => m.tipo === 'panel_gm').at(-1)!.introduccion.plantilla, '{heroes} bajan al sótano de la posada del Queso Feliz.');
+  // tras reiniciar no se vuelve a generar
+  assert.equal((await repo.buscarSesionPorCodigo(codigo))!.introduccion, '{heroes} bajan al sótano de la posada del Queso Feliz.');
+  const g2 = new Gestor(repo, () => {}, opciones());
+  await g2.conectar({ enviar: () => {} }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: 'x' }));
+  assert.equal(llamadas.length, 1);
 });

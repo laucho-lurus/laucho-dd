@@ -41,6 +41,7 @@ export const DATOS_DEMO: DatosIniciales = {
       resumen: 'Demo corta: unos kobolds ocupan la entrada de una mina abandonada.',
       variables: { antorchas_encendidas: false },
       diagrama: {
+        introduccion: '{heroes} esperan en la plaza de Piedragris, un pueblo minero a los pies de las montañas. El alcalde os ha contratado para limpiar la vieja mina de plata, ocupada por kobolds desde la primavera. Os entrega una lámpara, un mapa garabateado y la promesa de 30 monedas de oro para cada uno.',
         nodos: [
           { id: '1', tipo: 'escena', titulo: 'La boca de la mina', texto: 'Un túnel oscuro huele a humo y a kobold.', notas: 'Percepción CD 10 para ver huellas recientes.' },
           { id: '2', tipo: 'combate', titulo: 'La emboscada', texto: 'Tres kobolds atacan desde las vagonetas.', notas: '3 kobolds (CA 12, PG 5, daga +4 1d4+2).' },

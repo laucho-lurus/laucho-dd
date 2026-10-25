@@ -14,6 +14,7 @@ export const MAX_TOKENS = 500;
 export const MAX_VUELTAS = 3;
 export const MAX_PG_POR_LLAMADA = 25;
 export const MAX_PG_POR_TURNO = 2; // llamadas a aplicar_pg por disparador
+export const MAX_TOKENS_INTRODUCCION = 300;
 
 /** Lo único que usamos del SDK: así los tests inyectan un cliente falso. */
 export interface ClienteIa {
@@ -28,6 +29,7 @@ export interface Contexto {
   jugadores: EstadoJugador[];
   eventos: Evento[];
   permitir_pg: boolean; // casilla del GM humano
+  introduccion: string | null; // ya leída a los jugadores, con sus nombres
   monstruos: Monstruo[];
   criaturas: { srd_clave: string; nombre: string }[]; // las que se pueden sacar
 }
@@ -170,7 +172,7 @@ export function promptContexto(c: Contexto, disparador: string): string {
     return `- ${j.nombre} (id ${j.personaje_id}): ${j.raza} ${j.clase} ${j.nivel}, PG ${j.pg_actual}/${j.pg_max}${j.inconsciente ? ' INCONSCIENTE' : ''}, CA ${j.ca ?? '?'}, ${car}`;
   });
   return `Campaña: ${c.campana.nombre}. ${c.campana.resumen}
-
+${c.introduccion ? `\nIntroducción (ya leída a los jugadores; no la repitas ni la contradigas): ${c.introduccion}\n` : ''}
 NODO ACTUAL ${nodo ? `"${nodo.id}" (${nodo.tipo}): ${nodo.titulo}
 Texto: ${nodo.texto}
 Notas secretas: ${nodo.notas || '—'}${detallesNodo(nodo)}` : 'ninguno'}
@@ -288,6 +290,29 @@ export class GmIa {
     this.cliente = cliente;
     this.presupuesto = presupuesto;
     this.modelo = modelo;
+  }
+
+  /**
+   * Escribe una introducción de ambientación (plantilla con {heroes}) para una campaña que no la tiene.
+   * Una llamada, sin herramientas y con pocos tokens. Devuelve null si no hay presupuesto o no respondió.
+   */
+  async generarIntroduccion(perfil: PerfilGm, campana: { nombre: string; resumen: string; primerNodo: string }): Promise<string | null> {
+    if ((await this.presupuesto.estado()).nivel === 'agotado') return null;
+    const respuesta = await this.cliente.crear({
+      model: this.modelo,
+      max_tokens: MAX_TOKENS_INTRODUCCION,
+      system: [{ type: 'text', text: promptSistema(perfil), cache_control: { type: 'ephemeral' } }],
+      thinking: this.modelo.startsWith('claude-sonnet') ? { type: 'between_tools' } : { type: 'disabled' },
+      messages: [{
+        role: 'user',
+        content: `Escribe la introducción de ambientación de la campaña «${campana.nombre}» (${campana.resumen}). La primera escena es: ${campana.primerNodo}.
+Entre 3 y 5 frases, en español: un lugar concreto, el encargo que reciben los héroes y un gancho. Escribe literalmente {heroes} donde vayan los nombres de los personajes. Responde solo con el texto, sin títulos ni comillas.`,
+      }],
+    });
+    await this.presupuesto.registrar(costo(this.modelo, respuesta.usage));
+    const texto = respuesta.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join(' ').trim();
+    if (!texto) return null;
+    return /\{heroes\}/i.test(texto) ? texto : `{heroes}: ${texto}`;
   }
 
   estadoGasto() {

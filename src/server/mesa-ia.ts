@@ -115,6 +115,33 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     sala.difundir({ tipo: 'estado', estado: sala.estado() });
   }
 
+  /** Si la campaña no tiene introducción, la IA escribe una una sola vez y queda guardada en la sesión. */
+  prepararIntroduccion(sala: Sala) {
+    const gm = this.gm;
+    if (!gm || !sala.ia || sala.plantillaIntroduccion() || this.enCurso.has(sala)) return;
+    const perfil = sala.ia.perfil;
+    const primero = sala.diagrama.nodos[0];
+    let reloj: NodeJS.Timeout | undefined;
+    const limite = new Promise<null>((listo) => { reloj = setTimeout(() => listo(null), this.tiempoMaximo); });
+    const tarea = Promise.race([gm.generarIntroduccion(perfil, {
+      nombre: sala.campana.nombre,
+      resumen: sala.campana.resumen ?? '',
+      primerNodo: primero ? `${primero.titulo}. ${primero.texto}` : 'a elegir',
+    }), limite])
+      .then(async (texto) => {
+        if (!texto || sala.plantillaIntroduccion()) return; // el GM pudo escribir una mientras tanto
+        sala.introduccion = texto;
+        await this.puertos.guardarEstado(sala);
+      })
+      .catch((err) => this.puertos.registro('[ia] no se pudo generar la introducción:', err))
+      .finally(() => {
+        clearTimeout(reloj);
+        this.enCurso.delete(sala);
+        void this.enviarPanel(sala);
+      });
+    this.enCurso.set(sala, tarea);
+  }
+
   /** Para tests y apagado: espera a que termine la intervención en curso. */
   async esperar(sala: Sala) {
     await this.enCurso.get(sala);
@@ -160,6 +187,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
           jugadores: sala.estado().jugadores,
           eventos: await this.puertos.repo.ultimosEventos(sala.sesion.id, EVENTOS_CONTEXTO),
           permitir_pg: sala.ia?.puede_pg ?? false,
+          introduccion: sala.introduccion_mostrada ? sala.introduccionRellena() : null,
           monstruos: sala.listaMonstruos(),
           criaturas: await this.puertos.criaturas(sala),
         }),
@@ -268,6 +296,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
         ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: this.enCurso.has(sala), puede_deshacer: !intervencionVacia(sala.ia.ultima), puede_pg: sala.ia.puede_pg }
         : null,
       ia_disponible: this.disponible(),
+      introduccion: { plantilla: sala.plantillaIntroduccion(), vista: sala.introduccionRellena(), mostrada: sala.introduccion_mostrada },
       gasto,
       avisos: await this.puertos.repo.avisosBase().catch(() => []),
       monstruos: sala.listaMonstruos(), // con PG exactos: solo para el GM

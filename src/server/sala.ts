@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Arma, Campana, Caracteristicas, EstadoSesion, Personaje, Sesion } from './repositorio.ts';
 import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
 import type { PerfilGm } from '../ia/perfiles.ts';
+import { rellenarIntroduccion } from '../rules/introduccion.ts';
 import { cambiarNiebla, crearMapa, moverFicha, quitarFicha, validarMovimiento, vistaJugadores, type Mapa, type Posicion } from '../rules/mapa.ts';
 import { MAX_MONSTRUOS_VIVOS, monstruoPublico, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 
@@ -111,6 +112,9 @@ export class Sala {
   private vars: Variables;
   ia: IaSala | null = null;
   ia_pensando = false;
+  /** Introducción de esta sesión (editada por el GM o generada por la IA); si no, la de la campaña. */
+  introduccion: string | null;
+  introduccion_mostrada = false;
   private monstruos: Monstruo[] = [];
   private mapa: Mapa | null = null;
   private proximoMonstruo = 1;
@@ -125,6 +129,17 @@ export class Sala {
     // Si la sesión ya tenía estado guardado (servidor reiniciado), se retoma desde ahí.
     this.nodo = buscarNodo(this.diagrama, sesion.nodo_actual ?? null)?.id ?? nodoInicial(this.diagrama)?.id ?? null;
     this.vars = { ...(campana.variables ?? {}), ...(sesion.variables ?? {}) };
+    this.introduccion = sesion.introduccion ?? null;
+  }
+
+  plantillaIntroduccion(): string | null {
+    return this.introduccion?.trim() || this.diagrama.introduccion?.trim() || null;
+  }
+
+  /** La introducción con los nombres de los personajes sentados a la mesa. */
+  introduccionRellena(): string | null {
+    const plantilla = this.plantillaIntroduccion();
+    return plantilla && rellenarIntroduccion(plantilla, [...this.asientos.keys()].map((id) => this.personajes.get(id)!.nombre));
   }
 
   /** Lo que se guarda en la base para poder retomar la partida. */
@@ -134,6 +149,7 @@ export class Sala {
       variables: this.variables(),
       ia_pausada: this.ia?.pausada ?? false,
       ia_perfil_id: this.ia?.perfil.id ?? null,
+      introduccion: this.introduccion,
     };
   }
 

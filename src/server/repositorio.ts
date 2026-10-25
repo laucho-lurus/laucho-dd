@@ -81,6 +81,7 @@ export interface Sesion {
   ia_pausada?: boolean;
   ia_perfil_id?: string | null;
   gm_token_hash?: string | null; // SHA-256 del token del GM (migración 002)
+  introduccion?: string | null; // columna sesiones.resumen: introducción editada o generada para esta sesión
 }
 
 /** Estado de la partida que se guarda para poder retomarla. */
@@ -89,6 +90,7 @@ export interface EstadoSesion {
   variables: Variables;
   ia_pausada: boolean;
   ia_perfil_id: string | null;
+  introduccion: string | null;
 }
 
 /** Valores de eventos.tipo (columna de texto libre en db/schema.sql). */

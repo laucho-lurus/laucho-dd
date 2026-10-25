@@ -21,6 +21,7 @@ export type MensajeCliente =
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
   | { tipo: 'ver_diagrama' }
+  | { tipo: 'mostrar_introduccion'; texto?: string }
   | { tipo: 'mostrar_imagen'; url: string; titulo?: string }
   | { tipo: 'mapa_configurar'; ancho: number; alto: number; velocidad: number }
   | { tipo: 'mapa_fondo'; url: string | null }
@@ -172,6 +173,11 @@ export function validarMensaje(crudo: string): Validacion {
       const velocidad = entero(m, 'velocidad', 1, 100);
       if (esError(ancho) || esError(alto) || esError(velocidad) || !ancho || !alto) return falla('"ancho", "alto" y "velocidad" deben ser enteros');
       return bien({ tipo: 'mapa_configurar', ancho, alto, velocidad: velocidad ?? 6 });
+    }
+    case 'mostrar_introduccion': {
+      if (m.texto === undefined) return bien({ tipo: 'mostrar_introduccion' });
+      const t = texto(m, 'texto', 3000);
+      return esError(t) ? falla(t.error) : bien({ tipo: 'mostrar_introduccion', texto: t });
     }
     case 'mostrar_imagen': {
       // Solo imágenes subidas a este servidor.

@@ -159,6 +159,7 @@ export class Gestor {
       if (perfilId) {
         await this.ia!.activar(sala, perfilId);
         await this.guardarEstado(sala);
+        this.ia!.prepararIntroduccion(sala); // si la campaña no tiene, la IA escribe una (una sola vez)
       }
       this.salas.set(sesion.codigo, sala);
       cliente.enviar({ tipo: 'sesion_creada', codigo: sesion.codigo, token_gm: token, estado: sala.estado() });
@@ -276,6 +277,8 @@ export class Gestor {
         soloGm(quien);
         if (!sala.ia) throw new ErrorDeJuego('Esta sala no tiene GM IA');
         if (sala.ia.pausada) throw new ErrorDeJuego('La IA está pausada');
+        // La primera vez, antes de narrar, se lee la introducción (texto fijo, sin coste).
+        if (!sala.introduccion_mostrada && sala.plantillaIntroduccion()) await this.mostrarIntroduccion(sala, autor);
         return this.ia!.disparar(sala, 'El GM humano pide que narres la escena actual.');
       case 'pausar_ia': {
         soloGm(quien);
@@ -345,6 +348,13 @@ export class Gestor {
         if (!r.ok) throw new ErrorDeJuego(r.error);
         return this.cambioDeMapa(sala);
       }
+      case 'mostrar_introduccion':
+        soloGm(quien);
+        if (m.texto !== undefined) {
+          sala.introduccion = m.texto; // el GM la editó: queda para esta sesión
+          await this.guardarEstado(sala);
+        }
+        return this.mostrarIntroduccion(sala, autor);
       case 'mostrar_imagen':
         soloGm(quien);
         return this.publicar(sala, 'estado', autor, { cambio: 'imagen', url: m.url, texto: m.titulo ?? '' });
@@ -444,6 +454,14 @@ export class Gestor {
     const evento = await this.publicar(sala, 'estado', 'sistema', { cambio: 'monstruos', texto });
     if (deIa) sala.anotarIntervencion({ monstruos: [{ id, delta: r.delta }], eventos: evento.id === null ? [] : [evento.id] }, this.ia?.responderia(sala) ?? false);
     return `${texto} (${r.monstruo.nombre}: ${r.monstruo.pg_actual}/${r.monstruo.pg_max} PG)`;
+  }
+
+  /** Publica la introducción con los nombres de los personajes como primer mensaje fijo. */
+  private async mostrarIntroduccion(sala: Sala, autor: string) {
+    const texto = sala.introduccionRellena();
+    if (!texto) throw new ErrorDeJuego('Esta campaña no tiene introducción: escríbela en el panel o en el editor');
+    sala.introduccion_mostrada = true;
+    await this.publicar(sala, 'sistema', autor, { cambio: 'introduccion', texto });
   }
 
   /** Difunde el mapa (vista de jugadores en el estado; completo al GM) y lo guarda. Sin evento: se mueve a menudo. */
