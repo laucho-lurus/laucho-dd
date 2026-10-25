@@ -5,6 +5,24 @@ import { detenerGiro, empezarGiro, mostrarResultado } from './dados.js';
 import { agregarChat, iniciarChat } from './chat.js';
 
 const LARGO_CODIGO = 6;
+const claveToken = (codigo) => `gm-token:${codigo}`;
+
+// El token del GM se guarda en este navegador para poder volver a entrar (el servidor solo guarda su hash).
+function guardarToken(codigo, token) {
+  try {
+    localStorage.setItem(claveToken(codigo), token);
+  } catch {
+    // modo privado o almacenamiento bloqueado: no se podrá volver a entrar como GM desde aquí
+  }
+}
+
+function tokenGuardado(codigo) {
+  try {
+    return localStorage.getItem(claveToken(codigo));
+  } catch {
+    return null;
+  }
+}
 const $ = (id) => document.getElementById(id);
 
 let estado = null;
@@ -35,6 +53,7 @@ function recibir(m) {
     case 'personajes':
       return mostrarPersonajes(m.personajes);
     case 'sesion_creada':
+      guardarToken(m.codigo, m.token_gm);
       entrar({ rol: 'gm' }, m.estado, []);
       return aviso(`Sala creada. Comparte el código ${m.codigo} con tus jugadores.`);
     case 'bienvenida':
@@ -174,10 +193,13 @@ const codigoEscrito = () => $('codigo').value.replace(/\s/g, '').toUpperCase();
 
 $('codigo').addEventListener('input', () => {
   $('etiqueta-personaje').hidden = $('unirse').hidden = $('sin-personajes').hidden = true;
+  $('entrar-gm').hidden = !(codigoEscrito().length === LARGO_CODIGO && tokenGuardado(codigoEscrito()));
   if (codigoEscrito().length === LARGO_CODIGO) servidor.enviar({ tipo: 'ver_personajes', codigo: codigoEscrito() });
 });
 $('unirse').addEventListener('click', () =>
   servidor.enviar({ tipo: 'unirse', codigo: codigoEscrito(), personaje_id: $('personaje').value }));
+$('entrar-gm').addEventListener('click', () =>
+  servidor.enviar({ tipo: 'retomar_gm', codigo: codigoEscrito(), token_gm: tokenGuardado(codigoEscrito()) }));
 $('crear').addEventListener('click', () =>
   servidor.enviar({ tipo: 'crear_sesion', campana_id: $('campana').value, gm_perfil_id: $('gm-tipo').value || undefined }));
 
