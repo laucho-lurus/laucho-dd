@@ -37,3 +37,4 @@ button.peligro { background: var(--herida); color: #fff; margin-top: 8px; }
   .area { grid-template-columns: 1fr; }
   .lienzo { height: 60vh; }
 }
+.campo-ancho { width: 100%; resize: vertical; }

@@ -37,10 +37,25 @@ function pintar() {
   lienzo.pintar(estado.diagrama, seleccion);
   pintarPanel($('panel'), estado, seleccion, { cambiar, criaturas });
   pintarVariables($('variables'), estado, cambiar);
+  pintarIntroduccion();
   $('nombre').value = estado.nombre;
   $('deshacer').disabled = pasado.length === 0;
   $('rehacer').disabled = futuro.length === 0;
   document.title = `${sinGuardar ? '• ' : ''}Editor: ${estado.nombre}`;
+}
+
+const EJEMPLO_HEROES = ['Aria', 'Borin', 'Cael'];
+const listaNombres = (n) => (n.length < 2 ? n.join('') : `${n.slice(0, -1).join(', ')} y ${n.at(-1)}`);
+
+/** Introducción con vista previa de la sustitución (mismo formato que el servidor). */
+function pintarIntroduccion(texto = estado.diagrama.introduccion ?? '') {
+  if (document.activeElement !== $('introduccion')) $('introduccion').value = texto;
+  const vista = texto
+    .replace(/\{h[eé]roes\}/gi, listaNombres(EJEMPLO_HEROES))
+    .replace(/\{h[eé]roe_(\d+)\}/gi, (_, n) => EJEMPLO_HEROES[Number(n) - 1] ?? 'un aventurero');
+  $('introduccion-vista').textContent = !texto.trim()
+    ? '⚠ Falta la introducción: se lee al empezar la partida.'
+    : /\{h[eé]roe(s|_\d+)\}/i.test(texto) ? `Vista previa: ${vista}` : `⚠ No nombra a los héroes (usa {heroes}). Vista previa: ${vista}`;
 }
 
 /** Aplica `fn` sobre una copia del estado y guarda el anterior para deshacer. */
@@ -164,6 +179,8 @@ $('nueva').addEventListener('click', () => {
   $('campana').value = '';
 });
 $('nombre').addEventListener('change', () => cambiar((e) => { e.nombre = $('nombre').value.trim() || 'Sin nombre'; }));
+$('introduccion').addEventListener('change', () => cambiar((e) => { e.diagrama.introduccion = $('introduccion').value.trim() || undefined; }));
+$('introduccion').addEventListener('input', () => pintarIntroduccion($('introduccion').value)); // vista previa en vivo, sin historial
 $('guardar').addEventListener('click', guardar);
 $('validar').addEventListener('click', validar);
 $('exportar').addEventListener('click', exportar);

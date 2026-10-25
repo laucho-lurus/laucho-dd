@@ -156,6 +156,7 @@ function pintarPanel(p) {
   }
   pintarMonstruosGm(p.monstruos ?? []);
   pintarImagenesNodo(p.imagenes_nodo ?? []);
+  pintarIntroduccionGm(p.introduccion);
   const fondoActual = (mapaGm ?? estado?.mapa)?.fondo_url ?? '';
   $('mapa-fondos').replaceChildren(new Option('— sin fondo —', ''), ...(p.fondos ?? []).map((f) => new Option(f.nombre, f.url)));
   $('mapa-fondos').value = fondoActual;
@@ -171,6 +172,22 @@ function pintarPanel(p) {
   if (p.nodo) $('nodo').value = p.nodo.id;
   $('notas-nodo').textContent = p.nodo ? `Notas: ${p.nodo.notas || '—'} · Salidas: ${p.salidas.map((s) => `${s.hasta} (${s.etiqueta})`).join(', ') || 'ninguna'}` : '';
 }
+
+/** Introducción: el GM la ve con los nombres, la edita para esta sesión y la muestra (o vuelve a mostrar). */
+let plantillaIntro = null;
+function pintarIntroduccionGm(intro) {
+  if (!intro) return;
+  const editando = document.activeElement === $('intro-texto');
+  if (!editando && intro.plantilla !== plantillaIntro) $('intro-texto').value = intro.plantilla ?? '';
+  plantillaIntro = intro.plantilla;
+  $('intro-vista').textContent = intro.vista ? `Se verá así: ${intro.vista}` : 'Esta campaña no tiene introducción: escríbela aquí (con {heroes}).';
+  $('intro-estado').textContent = intro.mostrada ? '· ya mostrada' : '· sin mostrar';
+  $('intro-mostrar').textContent = intro.mostrada ? 'Volver a mostrar' : 'Mostrar a los jugadores';
+}
+$('intro-mostrar').addEventListener('click', () => {
+  const texto = $('intro-texto').value.trim();
+  servidor.enviar(texto && texto !== plantillaIntro ? { tipo: 'mostrar_introduccion', texto } : { tipo: 'mostrar_introduccion' });
+});
 
 /** Imágenes de la escena actual (y su PNJ): el GM decide cuándo enseñarlas. */
 function pintarImagenesNodo(imagenes) {

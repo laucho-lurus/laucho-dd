@@ -142,6 +142,7 @@ export function agregarEvento(evento, nombreDe) {
   let p;
   switch (evento.tipo) {
     case 'sistema':
+      if (d.cambio === 'introduccion') return fijarIntroduccion(d.texto);
       p = el('p', 'caja-sistema', d.texto);
       break;
     case 'mensaje':
@@ -170,6 +171,17 @@ export function agregarEvento(evento, nombreDe) {
   }
   narracion.append(p);
   narracion.scrollTop = narracion.scrollHeight;
+}
+
+/** La introducción queda fija arriba de la narración (la última que mostró el GM). */
+function fijarIntroduccion(texto) {
+  const narracion = $('narracion');
+  let caja = narracion.querySelector('.introduccion-fija');
+  if (!caja) {
+    caja = el('div', 'introduccion-fija');
+    narracion.prepend(caja);
+  }
+  caja.replaceChildren(el('strong', '', 'Introducción'), texto);
 }
 
 /** Imagen que el GM mostró a los jugadores (solo /uploads/: el servidor lo valida). */
