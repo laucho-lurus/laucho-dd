@@ -397,3 +397,25 @@ test('monstruos: se guardan y vuelven tras reiniciar', async () => {
   await g2.conectar({ enviar: (m) => r2.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
   assert.deepEqual(r2.find((m) => m.tipo === 'bienvenida')!.estado.monstruos, [{ id: 'm1', nombre: 'Lobo 1', estado: 'malherido' }]);
 });
+
+test('el GM vuelve a entrar tras reiniciar con su token; con uno inválido se rechaza', async () => {
+  const repo = new RepositorioMemoria(DATOS_DEMO);
+  const dir = mkdtempSync(join(tmpdir(), 'token-gm-'));
+  const opciones = () => ({ gm: null, perfiles: new Perfiles(join(dir, 'p.json')) });
+  const r1: Msj[] = [];
+  await new Gestor(repo, () => {}, opciones()).conectar({ enviar: (m) => r1.push(m as Msj) })
+    .recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID }));
+  const { codigo, token_gm } = r1.find((m) => m.tipo === 'sesion_creada')!;
+  const guardada = (await repo.buscarSesionPorCodigo(codigo))!;
+  assert.ok(guardada.gm_token_hash && guardada.gm_token_hash !== token_gm); // solo el hash
+
+  const despues = new Gestor(repo, () => {}, opciones());
+  const intruso: Msj[] = [];
+  await despues.conectar({ enviar: (m) => intruso.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'retomar_gm', codigo, token_gm: 'f'.repeat(32) }));
+  assert.equal(intruso.at(-1)!.mensaje, 'Token de GM incorrecto');
+
+  const gm: Msj[] = [];
+  await despues.conectar({ enviar: (m) => gm.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'retomar_gm', codigo, token_gm }));
+  assert.equal(gm.find((m) => m.tipo === 'bienvenida')!.rol, 'gm');
+  assert.ok(gm.some((m) => m.tipo === 'panel_gm'));
+});

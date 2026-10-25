@@ -16,10 +16,12 @@ function columnas(tabla: string) {
   };
 }
 
-function repoFalso(columnasMigracion = 3) {
+const TODAS = ['variables', 'ia_pausada', 'ia_perfil_id', 'gm_token_hash'];
+
+function repoFalso(columnasPresentes: string[] = TODAS) {
   const consultas: { sql: string; params: unknown[] }[] = [];
   const query = async (sql: string, params: unknown[] = []) => {
-    if (sql.includes('information_schema.columns')) return { rows: [{ n: String(columnasMigracion) }] };
+    if (sql.includes('information_schema.columns')) return { rows: columnasPresentes.map((column_name) => ({ column_name })) };
     consultas.push({ sql, params });
     return { rows: [{ id: '22222222-2222-4222-8222-222222222222' }] };
   };
@@ -82,14 +84,15 @@ test('si falla el INSERT hace rollback', async () => {
 
 /** Columnas de sesiones tras aplicar db/migraciones/001_sesiones_variables.sql. */
 const columnasSesiones = () => {
-  const migracion = readFileSync(new URL('../../db/migraciones/001_sesiones_variables.sql', import.meta.url), 'utf8');
-  return [...columnas('sesiones').todas, ...[...migracion.matchAll(/add column if not exists (\w+)/g)].map((m) => m[1])];
+  const migraciones = ['001_sesiones_variables.sql', '002_gm_token.sql']
+    .map((f) => readFileSync(new URL(`../../db/migraciones/${f}`, import.meta.url), 'utf8')).join('\n');
+  return [...columnas('sesiones').todas, ...[...migraciones.matchAll(/add column if not exists (\w+)/g)].map((m) => m[1])];
 };
 
 const estado = { nodo_actual: '2', variables: { llave_palomar: true }, ia_pausada: true, ia_perfil_id: null };
 
 test('guardarEstadoSesion con la migración 001 guarda todo, y las columnas existen', async () => {
-  const { repo, consultas } = repoFalso(3);
+  const { repo, consultas } = repoFalso();
   await repo.guardarEstadoSesion('s1', estado);
   const cols = [...consultas[0].sql.matchAll(/(\w+) = \$/g)].map((m) => m[1]);
   assert.deepEqual(cols, ['nodo_actual', 'variables', 'ia_pausada', 'ia_perfil_id', 'id']);
@@ -98,10 +101,26 @@ test('guardarEstadoSesion con la migración 001 guarda todo, y las columnas exis
 });
 
 test('sin la migración 001 solo guarda el nodo y avisa', async () => {
-  const { repo, consultas } = repoFalso(0);
+  const { repo, consultas } = repoFalso([]);
   await repo.guardarEstadoSesion('s1', estado);
   assert.match(consultas[0].sql, /set nodo_actual = \$2 where id = \$1$/);
   assert.match((await repo.avisosBase())[0], /migración 001/);
   await repo.buscarSesionPorCodigo('ABCDEF');
   assert.doesNotMatch(consultas.at(-1)!.sql, /variables/);
+});
+
+test('token del GM: con la migración 002 se guarda el hash; sin ella no se toca la base y se avisa', async () => {
+  const con = repoFalso();
+  await con.repo.guardarTokenGm('s1', 'abc');
+  assert.match(con.consultas[0].sql, /set gm_token_hash = \$2 where id = \$1/);
+  assert.ok(columnasSesiones().includes('gm_token_hash'));
+  await con.repo.buscarSesionPorCodigo('ABCDEF');
+  assert.match(con.consultas.at(-1)!.sql, /gm_token_hash from sesiones/);
+
+  const sin = repoFalso(['variables', 'ia_pausada', 'ia_perfil_id']);
+  await sin.repo.guardarTokenGm('s1', 'abc');
+  assert.equal(sin.consultas.length, 0);
+  const avisos = await sin.repo.avisosBase();
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0], /migración 002/);
 });

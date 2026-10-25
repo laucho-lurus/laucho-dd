@@ -69,6 +69,10 @@ export class RepositorioMemoria implements Repositorio {
     this.encuentros.set(sesionId, monstruos.map((m) => ({ ...m })));
   }
 
+  async guardarTokenGm(sesionId: string, hash: string) {
+    for (const [codigo, s] of this.sesiones) if (s.id === sesionId) this.sesiones.set(codigo, { ...s, gm_token_hash: hash });
+  }
+
   async avisosBase() {
     return [];
   }

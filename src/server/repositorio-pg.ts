@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { plantillaDeCriatura, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
-import { MIGRACION_001, type Campana, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
+import { MIGRACION_001, MIGRACION_002, type Campana, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
@@ -19,7 +19,7 @@ const aEvento = (f: FilaEvento): Evento => ({ ...f, id: Number(f.id), creado_en:
 /** Repositorio sobre Postgres/Neon con las tablas de db/schema.sql. */
 export class RepositorioPg implements Repositorio {
   private readonly pool: pg.Pool;
-  private migracion001: Promise<boolean> | null = null;
+  private columnas: Promise<Set<string>> | null = null;
 
   constructor(connectionString: string) {
     this.pool = new pg.Pool({ connectionString, max: 5 });
@@ -99,29 +99,40 @@ export class RepositorioPg implements Repositorio {
     }
   }
 
-  /** ¿Tiene sesiones las columnas de la migración 001? Se consulta una vez. */
-  private tieneMigracion001(): Promise<boolean> {
-    this.migracion001 ??= this.pool
-      .query<{ n: string }>(
-        `select count(*) as n from information_schema.columns
-          where table_name = 'sesiones' and column_name in ('variables', 'ia_pausada', 'ia_perfil_id')`,
+  /** Columnas opcionales de sesiones que ya existen (migraciones 001 y 002). Se consulta una vez. */
+  private columnasOpcionales(): Promise<Set<string>> {
+    this.columnas ??= this.pool
+      .query<{ column_name: string }>(
+        `select column_name from information_schema.columns
+          where table_name = 'sesiones' and column_name = any($1)`,
+        [['variables', 'ia_pausada', 'ia_perfil_id', 'gm_token_hash']],
       )
-      .then((r) => Number(r.rows[0].n) === 3)
+      .then((r) => new Set(r.rows.map((f) => f.column_name)))
       .catch((err) => {
-        this.migracion001 = null; // reintenta la próxima vez
+        this.columnas = null; // reintenta la próxima vez
         throw err;
       });
-    return this.migracion001;
+    return this.columnas;
+  }
+
+  private async tieneMigracion001() {
+    const c = await this.columnasOpcionales();
+    return c.has('variables') && c.has('ia_pausada') && c.has('ia_perfil_id');
+  }
+
+  private async tieneMigracion002() {
+    return (await this.columnasOpcionales()).has('gm_token_hash');
   }
 
   async buscarSesionPorCodigo(codigo: string) {
-    const extra = (await this.tieneMigracion001()) ? ', variables, ia_pausada, ia_perfil_id' : '';
+    const con001 = await this.tieneMigracion001();
+    const extra = (con001 ? ', variables, ia_pausada, ia_perfil_id' : '') + ((await this.tieneMigracion002()) ? ', gm_token_hash' : '');
     const r = await this.pool.query<Sesion>(
       `select id, codigo, campana_id, estado, nodo_actual${extra} from sesiones where codigo = $1`,
       [codigo],
     );
     const s = r.rows[0];
-    return s ? { ...s, variables: extra ? s.variables : null } : null;
+    return s ? { ...s, variables: con001 ? s.variables : null } : null;
   }
 
   async guardarEstadoSesion(sesionId: string, e: EstadoSesion) {
@@ -161,8 +172,16 @@ export class RepositorioPg implements Repositorio {
     }
   }
 
+  async guardarTokenGm(sesionId: string, hash: string) {
+    if (!(await this.tieneMigracion002())) return; // sin la columna, el token vive solo en memoria
+    await this.pool.query('update sesiones set gm_token_hash = $2 where id = $1', [sesionId, hash]);
+  }
+
   async avisosBase() {
-    return (await this.tieneMigracion001()) ? [] : [MIGRACION_001];
+    return [
+      ...((await this.tieneMigracion001()) ? [] : [MIGRACION_001]),
+      ...((await this.tieneMigracion002()) ? [] : [MIGRACION_002]),
+    ];
   }
 
   async registrarEvento(e: NuevoEvento) {

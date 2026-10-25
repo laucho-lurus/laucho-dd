@@ -74,6 +74,10 @@ export class RepositorioMixto implements Repositorio {
     return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarMonstruos(sesionId, monstruos);
   }
 
+  async guardarTokenGm(sesionId: string, hash: string) {
+    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarTokenGm(sesionId, hash);
+  }
+
   async avisosBase() {
     return this.principal.avisosBase();
   }

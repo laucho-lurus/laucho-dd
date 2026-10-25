@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Arma, Campana, Caracteristicas, EstadoSesion, Personaje, Sesion } from './repositorio.ts';
 import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
 import type { PerfilGm } from '../ia/perfiles.ts';
@@ -31,6 +32,9 @@ export const unirIntervenciones = (a: IntervencionIa, b: Partial<IntervencionIa>
 export const intervencionVacia = (i: IntervencionIa) => i.eventos.length + i.pg.length + i.monstruos.length + i.agregados.length === 0;
 
 export const MAX_JUGADORES = 6;
+
+/** Solo se guarda el SHA-256 del token del GM, nunca el token. */
+export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
 /** Lo único que la sala necesita de una conexión: poder enviarle un mensaje. */
 export interface Cliente {
@@ -91,7 +95,7 @@ export class Sala {
   readonly sesion: Sesion;
   readonly campana: Campana;
   private personajes: ReadonlyMap<string, Personaje>;
-  private readonly tokenGm: string | null;
+  private readonly hashTokenGm: string | null;
   private gm: Cliente | null = null;
   private readonly asientos = new Map<string, Cliente | null>(); // personaje_id → conexión (null = desconectado)
   private readonly pg = new Map<string, number>(); // personaje_id → PG actuales
@@ -108,11 +112,11 @@ export class Sala {
   private monstruos: Monstruo[] = [];
   private proximoMonstruo = 1;
 
-  constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], tokenGm: string | null) {
+  constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], hashTokenGm: string | null) {
     this.sesion = sesion;
     this.campana = campana;
     this.personajes = new Map(personajes.map((p) => [p.id, p]));
-    this.tokenGm = tokenGm;
+    this.hashTokenGm = hashTokenGm;
     for (const p of personajes) this.pg.set(p.id, p.pg_actual);
     this.diagrama = campana.diagrama ?? DIAGRAMA_VACIO;
     // Si la sesión ya tenía estado guardado (servidor reiniciado), se retoma desde ahí.
@@ -191,7 +195,10 @@ export class Sala {
   }
 
   sentarGm(cliente: Cliente, token: string | null): Resultado {
-    if (this.tokenGm === null || token !== this.tokenGm) return error('Token de GM incorrecto');
+    if (this.hashTokenGm === null || token === null) return error('Token de GM incorrecto');
+    const dado = Buffer.from(hashToken(token), 'hex');
+    const esperado = Buffer.from(this.hashTokenGm, 'hex');
+    if (dado.length !== esperado.length || !timingSafeEqual(dado, esperado)) return error('Token de GM incorrecto');
     if (this.gm) return error('El GM ya está conectado');
     this.gm = cliente;
     return ok;

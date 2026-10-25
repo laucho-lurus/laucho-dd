@@ -7,7 +7,7 @@ import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
 import { MesaIa } from './mesa-ia.ts';
-import { intervencionVacia } from './sala.ts';
+import { hashToken, intervencionVacia } from './sala.ts';
 import { SRD_MONSTRUOS, type Plantilla } from '../rules/monstruos.ts';
 import type { Objetivo } from '../ia/gm-ia.ts';
 import type { GmIa } from '../ia/gm-ia.ts';
@@ -151,8 +151,9 @@ export class Gestor {
       const sesion = await this.repo.crearSesion(campana.id, generarCodigo());
       if (!sesion) continue; // código ya usado: probamos otro
       const token = randomBytes(16).toString('hex');
-      const sala = new Sala(sesion, campana, personajes, token);
+      const sala = new Sala(sesion, campana, personajes, hashToken(token));
       sala.sentarGm(cliente, token);
+      await this.repo.guardarTokenGm(sesion.id, hashToken(token)).catch((err) => this.registro('[sala] no se pudo guardar el token del GM:', err));
       if (perfilId) {
         await this.ia!.activar(sala, perfilId);
         await this.guardarEstado(sala);
@@ -187,8 +188,7 @@ export class Gestor {
     const campana = await this.repo.buscarCampana(sesion.campana_id);
     if (!campana) return null;
     const personajes = await this.repo.personajesDeCampana(campana.id);
-    // El token del GM vive solo en memoria: tras un reinicio el GM no puede retomar (ver README).
-    const sala = new Sala(sesion, campana, personajes, null);
+    const sala = new Sala(sesion, campana, personajes, sesion.gm_token_hash ?? null); // sin migración 002 no hay hash: el GM no puede volver
     sala.cargarMonstruos(await this.repo.monstruosDeSesion(sesion.id));
     if (sesion.ia_perfil_id && this.ia?.disponible()) {
       const error = await this.ia.activar(sala, sesion.ia_perfil_id);

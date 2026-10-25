@@ -5,6 +5,7 @@ import type { Diagrama, Variables } from '../rules/aventura.ts';
 import type { Monstruo, Plantilla } from '../rules/monstruos.ts';
 
 export const MIGRACION_001 = 'Falta aplicar la migración 001 (db/migraciones/001_sesiones_variables.sql)';
+export const MIGRACION_002 = 'Falta aplicar la migración 002 (db/migraciones/002_gm_token.sql): el GM no podrá volver a entrar tras reiniciar';
 
 export interface Campana {
   id: string;
@@ -65,6 +66,7 @@ export interface Sesion {
   variables?: Variables | null; // null: la base aún no tiene la columna (migración 001)
   ia_pausada?: boolean;
   ia_perfil_id?: string | null;
+  gm_token_hash?: string | null; // SHA-256 del token del GM (migración 002)
 }
 
 /** Estado de la partida que se guarda para poder retomarla. */
@@ -102,6 +104,8 @@ export interface Repositorio {
   buscarSesionPorCodigo(codigo: string): Promise<Sesion | null>;
   /** Guarda nodo, variables y estado de la IA. Sin la migración 001 solo guarda el nodo. */
   guardarEstadoSesion(sesionId: string, estado: EstadoSesion): Promise<void>;
+  /** Guarda el hash del token del GM. Sin la migración 002 no hace nada (queda solo en memoria). */
+  guardarTokenGm(sesionId: string, hash: string): Promise<void>;
   /** Criaturas disponibles para la campaña (tabla criaturas: de la campaña o globales). */
   criaturasDeCampana(campanaId: string): Promise<Plantilla[]>;
   /** Monstruos del encuentro activo de la sesión (encuentros.participantes). */
