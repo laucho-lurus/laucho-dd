@@ -122,7 +122,8 @@ export function agregarEvento(evento, nombreDe) {
       p.prepend(el('span', 'quien', `${quien}:`));
       break;
     case 'tirada':
-      p = el('p', 'tirada', `🎲 ${quien} tira ${d.notation}${d.motivo ? ` (${d.motivo})` : ''}: ${desglose(d)} `);
+      p = el('p', 'tirada', d.texto ?? `🎲 ${quien} tira ${d.notation}${d.motivo ? ` (${d.motivo})` : ''}: ${desglose(d)} `);
+      if (d.texto) break; // el servidor ya incluye éxito o fracaso
       if (d.exito === true) p.append(el('span', 'exito', '¡Éxito!'));
       if (d.exito === false) p.append(el('span', 'fracaso', 'Fracaso'));
       break;
@@ -146,13 +147,13 @@ export function desglose(tirada) {
 }
 
 function textoDeEstado(d, nombreDe) {
+  if (d.texto) return d.texto; // el servidor ya lo redactó (peticiones, avisos de IA, pausa, deshacer)
   if (d.cambio === 'entra') return `${d.personaje_nombre} se sienta a la mesa.`;
   if (d.cambio === 'pedir_tirada') return `El GM pide a ${d.personaje_nombre} una tirada${d.motivo ? ` de ${d.motivo}` : ''} (${d.notacion}).`;
   if (d.cambio === 'pg') {
     const verbo = d.cantidad < 0 ? `recibe ${-d.cantidad} de daño` : `recupera ${d.cantidad} PG`;
     return `${d.personaje_nombre} ${verbo}${d.motivo ? ` (${d.motivo})` : ''}: ${d.pg_actual} PG${d.inconsciente ? ', inconsciente' : ''}.`;
   }
-  if (d.texto) return d.texto; // avisos de IA, pausa, deshacer
   if (d.cambio === 'nodo') return `— ${d.titulo ?? 'La historia avanza'} —`;
   if (d.cambio === 'turno') return `— Turno de ${nombreDe(d.turno_de)} · ronda ${d.ronda} —`;
   return '— Nuevo orden de turnos —';

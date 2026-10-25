@@ -67,6 +67,11 @@ Cómo se juega:
 El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
   }
 
+  /** ¿Respondería la IA a un disparador ahora mismo? */
+  responderia(sala: Sala) {
+    return Boolean(this.gm && sala.ia && !sala.ia.pausada && !this.enCurso.has(sala));
+  }
+
   /** Lanza una intervención de la IA sin bloquear la sala. */
   disparar(sala: Sala, disparador: string) {
     const ia = sala.ia;
@@ -86,9 +91,17 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     const intervencion = Promise.race([this.intervenir(sala, disparador), limite]).finally(() => {
       clearTimeout(reloj);
       this.enCurso.delete(sala);
+      this.marcarPensando(sala, false);
       void this.enviarPanel(sala);
     });
     this.enCurso.set(sala, intervencion);
+    this.marcarPensando(sala, true);
+  }
+
+  /** Actualiza la franja "Qué sigue" de todos. */
+  private marcarPensando(sala: Sala, pensando: boolean) {
+    sala.ia_pensando = pensando;
+    sala.difundir({ tipo: 'estado', estado: sala.estado() });
   }
 
   /** Para tests y apagado: espera a que termine la intervención en curso. */

@@ -284,3 +284,36 @@ test('el chat se restaura al reunirse tras reiniciar y la IA lo ve etiquetado', 
   assert.match(prompt, /\[chat de mesa\] GM: Pausa para el café/);
   assert.doesNotMatch(prompt.split('Chat de mesa reciente')[0], /Pausa para el café/);
 });
+
+test('"Qué sigue" recorre acción → IA pensando → tirada pendiente → resultado → siguiente turno', async () => {
+  const TORVALD = DATOS_DEMO.personajes![1].id;
+  const { gestor, humano, jugador, codigo } = await mesa([
+    respuesta([usar('narrar', { texto: 'El kobold salta.' }), usar('pedir_tirada', { jugador: BRISA, tirada: '1d20+5', motivo: 'Ataque con estoque al kobold' })]),
+    respuesta([usar('narrar', { texto: 'Le aciertas. Brisa, tu turno ha terminado: sigue Torvald.' })], 'end_turn'),
+  ]);
+  await gestor.conectar({ enviar: () => {} }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: TORVALD }));
+  const vistos = () => jugador.recibidos.map((m) => m.estado?.que_sigue).filter(Boolean)
+    .filter((t: string, i: number, a: string[]) => t !== a[i - 1]);
+
+  assert.equal(vistos().at(-1), 'Turno de Brisa: escribe tu acción');
+  await jugador.enviar({ tipo: 'accion', texto: 'Ataco al kobold' });
+  await gestor.esperarIa(codigo);
+  await jugador.enviar({ tipo: 'tirar', notacion: '1d20' });
+  await gestor.esperarIa(codigo);
+  await humano.enviar({ tipo: 'siguiente_turno' });
+
+  assert.deepEqual(vistos().slice(-6), [
+    'Turno de Brisa: escribe tu acción',
+    'IA pensando…',
+    'Esperando la tirada de Brisa: Ataque con estoque al kobold',
+    'IA pensando…',
+    'Turno de Brisa: escribe tu acción',
+    'Turno de Torvald: escribe tu acción',
+  ]);
+  const peticion = eventos(jugador).find((e) => e.datos.cambio === 'pedir_tirada');
+  assert.equal(peticion.datos.texto, 'El GM IA pide a Brisa: Ataque con estoque al kobold (1d20+5).');
+  assert.match(eventos(jugador).find((e) => e.tipo === 'tirada').datos.texto, /^🎲 Brisa tira 1d20\+5 · Ataque con estoque al kobold: \[\d+\] \+5 = \d+$/);
+
+  await humano.enviar({ tipo: 'pausar_ia', pausada: true });
+  assert.equal(jugador.ultimo().estado.que_sigue, 'IA pausada: el GM humano decide');
+});

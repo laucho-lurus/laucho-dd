@@ -52,6 +52,7 @@ export interface EstadoSala {
   turno_de: string | null;
   ronda: number;
   max_jugadores: number;
+  que_sigue: string; // franja "Qué sigue", calculada sin IA
 }
 
 /** Tirada que el GM pidió a un jugador. La CD solo la conoce el servidor (y el GM). */
@@ -86,6 +87,7 @@ export class Sala {
   private nodo: string | null;
   private vars: Variables;
   ia: IaSala | null = null;
+  ia_pensando = false;
 
   constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], tokenGm: string | null) {
     this.sesion = sesion;
@@ -279,7 +281,20 @@ export class Sala {
       turno_de: this.turnoDe(),
       ronda: this.ronda,
       max_jugadores: MAX_JUGADORES,
+      que_sigue: this.queSigue(),
     };
+  }
+
+  /** Qué toca ahora, en orden de prioridad: tirada pendiente, IA, turno de un jugador o el GM. */
+  queSigue(): string {
+    for (const [id, p] of this.peticiones) {
+      return `Esperando la tirada de ${this.personajes.get(id)?.nombre ?? '?'}: ${p.motivo ?? p.notacion}`;
+    }
+    if (this.ia && this.ia_pensando) return 'IA pensando…';
+    if (this.ia?.pausada) return 'IA pausada: el GM humano decide';
+    const turno = this.turnoDe();
+    if (turno) return `Turno de ${this.personajes.get(turno)?.nombre ?? '?'}: escribe tu acción`;
+    return 'Turno del GM';
   }
 
   private peticionPublica(id: string) {

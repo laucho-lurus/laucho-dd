@@ -225,6 +225,8 @@ export class Gestor {
       case 'accion':
         if (quien.rol !== 'jugador') throw new ErrorDeJuego('El GM narra con "narracion", no con "accion"');
         if (sala.turnoDe() !== quien.personaje_id) throw new ErrorDeJuego('No es tu turno');
+        // Así la franja "Qué sigue" pasa directo a "IA pensando…" sin un parpadeo intermedio.
+        if (this.ia?.responderia(sala)) sala.ia_pensando = true;
         await this.publicar(sala, 'accion', autor, { texto: m.texto, personaje_nombre: nombre });
         return this.ia?.disparar(sala, `${nombre} (jugador) hace: ${m.texto}`);
       case 'chat': {
@@ -247,6 +249,7 @@ export class Gestor {
         if (!peticion) throw new ErrorDeJuego('No tienes ninguna tirada pendiente: espera a que el GM te pida una');
         const r = tirar(peticion.notacion);
         const exito = peticion.cd === null ? null : r.total >= peticion.cd;
+        if (this.ia?.responderia(sala)) sala.ia_pensando = true;
         await this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre, texto: textoTirada(nombre, r, peticion.motivo, exito) });
         const resultado = exito === null ? '' : exito ? ` contra CD ${peticion.cd}: ÉXITO` : ` contra CD ${peticion.cd}: FRACASO`;
         return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.`);

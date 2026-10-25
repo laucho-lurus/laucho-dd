@@ -79,6 +79,7 @@ function entrar(rol, nuevoEstado, historial) {
 
 function actualizar(nuevoEstado) {
   estado = nuevoEstado;
+  $('que-sigue').textContent = estado.que_sigue ?? '';
   const esGm = miRol?.rol === 'gm';
   pintarRetratos(estado, esGm ? (personaje_id, cantidad) => servidor.enviar({ tipo: 'aplicar_pg', personaje_id, cantidad }) : null);
   if (esGm) actualizarSelectorPedir();
@@ -176,6 +177,7 @@ $('pedir-tipo').addEventListener('change', () => {
   const tipo = $('pedir-tipo').value;
   $('pedir-notacion').hidden = tipo !== 'libre';
   $('pedir-motivo').hidden = tipo.startsWith('chequeo:');
+  $('pedir-motivo').placeholder = tipo === 'libre' ? 'Para qué es (obligatorio)' : 'Motivo (opcional)';
 });
 $('pedir-cd-tipo').addEventListener('change', () => {
   $('pedir-cd').hidden = $('pedir-cd-tipo').value !== 'libre';
@@ -189,7 +191,14 @@ function peticionElegida() {
   const base = { tipo: 'pedir_tirada', personaje_id: $('pedir-a').value, cd: Number.isNaN(cd) ? undefined : cd };
   if (tipo.startsWith('chequeo:')) return { ...base, chequeo: tipo.slice('chequeo:'.length) };
   const notacion = tipo === 'libre' ? $('pedir-notacion').value.trim() : tipo.slice('dado:'.length);
-  return { ...base, notacion, motivo: $('pedir-motivo').value.trim() || undefined };
+  const motivo = $('pedir-motivo').value.trim();
+  // En "Personalizada" el GM debe decir para qué es; en los dados sueltos se rellena solo.
+  if (tipo === 'libre' && motivo.length < 8) return null;
+  return { ...base, notacion, motivo: motivo || (notacion.includes('d20') ? 'Tirada de d20' : `Tirada de ${notacion}`) };
 }
-$('pedir-enviar').addEventListener('click', () => servidor.enviar(peticionElegida()));
+$('pedir-enviar').addEventListener('click', () => {
+  const peticion = peticionElegida();
+  if (!peticion) return aviso('Escribe para qué es la tirada (mín. 8 caracteres), p. ej. "Daño del estoque al kobold".');
+  servidor.enviar(peticion);
+});
 $('turno').addEventListener('click', () => servidor.enviar({ tipo: 'siguiente_turno' }));
