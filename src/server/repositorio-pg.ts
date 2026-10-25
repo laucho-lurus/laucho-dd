@@ -64,7 +64,7 @@ export class RepositorioPg implements Repositorio {
 
   async buscarCampana(id: string) {
     if (!UUID.test(id)) return null;
-    const r = await this.pool.query<Campana>('select id, nombre from campanas where id = $1', [id]);
+    const r = await this.pool.query<Campana>('select id, nombre, diagrama, variables, resumen from campanas where id = $1', [id]);
     return r.rows[0] ?? null;
   }
 

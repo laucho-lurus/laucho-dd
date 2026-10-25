@@ -28,7 +28,7 @@ export interface EstadoJugador {
 
 export interface EstadoSala {
   codigo: string;
-  campana: Campana;
+  campana: Pick<Campana, 'id' | 'nombre'>;
   gm_conectado: boolean;
   jugadores: EstadoJugador[];
   orden: string[];
@@ -186,7 +186,7 @@ export class Sala {
   estado(): EstadoSala {
     return {
       codigo: this.sesion.codigo,
-      campana: this.campana,
+      campana: { id: this.campana.id, nombre: this.campana.nombre }, // sin diagrama: las notas son del GM
       gm_conectado: this.gm !== null,
       jugadores: [...this.asientos].map(([id, c]) => {
         const p = this.personajes.get(id)!;

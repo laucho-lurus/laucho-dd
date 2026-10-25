@@ -48,7 +48,7 @@ test('ver_campanas lista id y nombre', async () => {
   const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {});
   const c = cliente(gestor);
   await c.enviar({ tipo: 'ver_campanas' });
-  assert.deepEqual(c.ultimo(), { tipo: 'campanas', campanas: DATOS_DEMO.campanas });
+  assert.deepEqual(c.ultimo().campanas, [{ id: CAMPANA_DEMO_ID, nombre: 'La mina perdida (demo)' }]);
 });
 
 test('crear sala con campaña inexistente da error', async () => {

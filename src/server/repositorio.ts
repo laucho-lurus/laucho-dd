@@ -1,9 +1,14 @@
 // Acceso a datos del servidor de salas. Dos implementaciones:
 // memoria (tests y desarrollo) y Postgres/Neon (producción).
 
+import type { Diagrama, Variables } from '../rules/aventura.ts';
+
 export interface Campana {
   id: string;
   nombre: string;
+  diagrama?: Diagrama;
+  variables?: Variables;
+  resumen?: string;
 }
 
 export interface Personaje {

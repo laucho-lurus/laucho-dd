@@ -49,7 +49,7 @@ export function crearApi(repo: Repositorio) {
           clases: opciones(CLASES),
           alineamientos: ALINEAMIENTOS,
           metodos: METODOS,
-          campanas: await repo.listarCampanas(),
+          campanas: (await repo.listarCampanas()).map(({ id, nombre }) => ({ id, nombre })),
         });
         return true;
       }

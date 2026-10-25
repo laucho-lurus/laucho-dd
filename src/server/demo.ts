@@ -34,7 +34,25 @@ const personaje = (
 const arma = (nombre: string, ataque: string, dano: string): Arma => ({ nombre, ataque, dano });
 
 export const DATOS_DEMO: DatosIniciales = {
-  campanas: [{ id: CAMPANA_DEMO_ID, nombre: 'La mina perdida (demo)' }],
+  campanas: [
+    {
+      id: CAMPANA_DEMO_ID,
+      nombre: 'La mina perdida (demo)',
+      resumen: 'Demo corta: unos kobolds ocupan la entrada de una mina abandonada.',
+      variables: { antorchas_encendidas: false },
+      diagrama: {
+        nodos: [
+          { id: '1', tipo: 'escena', titulo: 'La boca de la mina', texto: 'Un túnel oscuro huele a humo y a kobold.', notas: 'Percepción CD 10 para ver huellas recientes.' },
+          { id: '2', tipo: 'combate', titulo: 'La emboscada', texto: 'Tres kobolds atacan desde las vagonetas.', notas: '3 kobolds (CA 12, PG 5, daga +4 1d4+2).' },
+          { id: '3', tipo: 'final', titulo: 'El filón', texto: 'Tras los kobolds brilla una veta de plata.', notas: 'Recompensa: 30 po cada uno.' },
+        ],
+        flechas: [
+          { desde: '1', hasta: '2', etiqueta: 'Entran al túnel' },
+          { desde: '2', hasta: '3', etiqueta: 'Vencen a los kobolds' },
+        ],
+      },
+    },
+  ],
   personajes: [
     personaje(1, 'Brisa', 'Mediana', 'Pícara', [8, 17, 12, 13, 12, 14], 9, 14, [arma('Estoque', '+5', '1d8+3 perforante'), arma('Arco corto', '+5', '1d6+3 perforante')]),
     personaje(2, 'Torvald', 'Enano', 'Guerrero', [16, 12, 16, 10, 11, 8], 13, 18, [arma('Hacha de batalla', '+5', '1d8+3 cortante'), arma('Hacha de mano', '+5', '1d6+3 cortante')]),

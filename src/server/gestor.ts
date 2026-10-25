@@ -71,7 +71,7 @@ export class Gestor {
   private async atender(m: MensajeCliente, cliente: Cliente, sala: Sala | null): Promise<Sala | void> {
     switch (m.tipo) {
       case 'ver_campanas':
-        cliente.enviar({ tipo: 'campanas', campanas: await this.repo.listarCampanas() });
+        cliente.enviar({ tipo: 'campanas', campanas: (await this.repo.listarCampanas()).map(({ id, nombre }) => ({ id, nombre })) });
         return;
       case 'crear_sesion':
         if (sala) throw new ErrorDeJuego('Ya estás en una sala');
@@ -79,7 +79,7 @@ export class Gestor {
       case 'ver_personajes': {
         const s = await this.salaPorCodigo(m.codigo);
         s.incorporar(await this.repo.personajesDeCampana(s.campana.id));
-        cliente.enviar({ tipo: 'personajes', codigo: s.sesion.codigo, campana: s.campana, personajes: s.listaPersonajes() });
+        cliente.enviar({ tipo: 'personajes', codigo: s.sesion.codigo, campana: { id: s.campana.id, nombre: s.campana.nombre }, personajes: s.listaPersonajes() });
         return;
       }
       case 'unirse':
