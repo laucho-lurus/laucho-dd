@@ -131,3 +131,15 @@ input, select, textarea {
 .retrato .circulo { overflow: hidden; }
 .retrato .circulo img { width: 100%; height: 100%; object-fit: cover; }
 .enlace { color: var(--oro); }
+
+/* GM IA */
+.ayuda-ia { color: var(--tenue); font-size: .8rem; }
+.panel-gm { background: var(--madera); border: 1px solid var(--borde); border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; }
+.panel-gm label { color: var(--tenue); font-size: .85rem; }
+.ia-estado { font-size: .85rem; color: var(--oro); }
+.ia-estado.aviso-gasto { color: #f0b37e; }
+.ia-estado.agotado { color: #f0907e; }
+.notas-nodo { color: var(--tenue); font-size: .8rem; flex: 1; min-width: 200px; }
+.narracion .gm.ia { border-left: 3px solid #8a6d3b; padding-left: 10px; }
+.narracion .etiqueta-ia { display: block; font-family: 'Cinzel', serif; font-size: .7rem; color: #8a6d3b; letter-spacing: 1px; }
+.narracion .deshecho { display: none; }

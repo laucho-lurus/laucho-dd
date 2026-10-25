@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perfiles de GM IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/mesa.css">
+<link rel="stylesheet" href="/personaje.css">
+</head>
+<body>
+<main class="creacion">
+  <h1>Perfiles de GM IA</h1>
+  <section class="tarjeta">
+    <label>Perfil <select id="lista"></select></label>
+    <div class="rejilla">
+      <label>Nombre <input id="nombre" maxlength="40"></label>
+      <label>Dificultad <select id="dificultad"></select></label>
+    </div>
+    <label>Descripción corta <input id="descripcion" maxlength="200"></label>
+    <label>Tono y estilo <textarea id="tono" rows="5" maxlength="1000" placeholder="Cómo narra, ritmo, humor, cómo hablan los PNJ…"></textarea></label>
+  </section>
+  <p id="aviso" class="aviso"></p>
+  <div class="fila acciones">
+    <button id="guardar">Guardar</button>
+    <a href="/">Volver a la mesa</a>
+  </div>
+</main>
+<script type="module" src="/js/perfiles.js"></script>
+</body>
+</html>

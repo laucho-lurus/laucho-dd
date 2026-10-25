@@ -111,7 +111,8 @@ export function agregarEvento(evento, nombreDe) {
   let p;
   switch (evento.tipo) {
     case 'mensaje':
-      p = el('p', 'gm', d.texto);
+      p = el('p', d.ia ? 'gm ia' : 'gm', d.texto);
+      if (d.ia) p.prepend(el('span', 'etiqueta-ia', d.personaje_nombre));
       break;
     case 'accion':
       p = el('p', 'accion', ` ${d.texto}`);
@@ -125,7 +126,11 @@ export function agregarEvento(evento, nombreDe) {
     default:
       p = el('p', 'sistema', textoDeEstado(d, nombreDe));
   }
+  if (evento.id != null) p.dataset.id = evento.id;
   const narracion = $('narracion');
+  if (d.cambio === 'deshacer_ia') {
+    for (const id of d.eventos) narracion.querySelector(`[data-id="${Number(id)}"]`)?.classList.add('deshecho');
+  }
   narracion.append(p);
   narracion.scrollTop = narracion.scrollHeight;
 }
@@ -143,6 +148,8 @@ function textoDeEstado(d, nombreDe) {
     const verbo = d.cantidad < 0 ? `recibe ${-d.cantidad} de daño` : `recupera ${d.cantidad} PG`;
     return `${d.personaje_nombre} ${verbo} (${d.pg_actual} PG)${d.inconsciente ? ' y cae inconsciente' : ''}.`;
   }
+  if (d.texto) return d.texto; // avisos de IA, pausa, deshacer
+  if (d.cambio === 'nodo') return `— ${d.titulo ?? 'La historia avanza'} —`;
   if (d.cambio === 'turno') return `— Turno de ${nombreDe(d.turno_de)} · ronda ${d.ronda} —`;
   return '— Nuevo orden de turnos —';
 }

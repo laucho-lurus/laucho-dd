@@ -22,7 +22,14 @@ function recibir(m) {
   switch (m.tipo) {
     case 'campanas':
       $('campana').replaceChildren(...m.campanas.map((c) => new Option(c.nombre, c.id)));
+      $('gm-tipo').replaceChildren(
+        new Option('GM: humano', ''),
+        ...(m.ia_disponible ? m.perfiles.map((p) => new Option(`GM IA: ${p.nombre} — ${p.descripcion}`, p.id)) : []),
+      );
+      $('ia-info').textContent = m.ia_disponible ? 'Con GM IA tú sigues al mando: puedes pausarla o corregirla.' : 'GM IA no disponible (falta la clave de Anthropic en el servidor).';
       return;
+    case 'panel_gm':
+      return pintarPanel(m);
     case 'personajes':
       return mostrarPersonajes(m.personajes);
     case 'sesion_creada':
@@ -91,6 +98,32 @@ function mostrarPeticion(p) {
   if (peticion) $('texto-peticion').textContent = `El GM te pide una tirada${peticion.motivo ? ` de ${peticion.motivo}` : ''} (${peticion.notacion})`;
 }
 
+/** Panel privado del GM: gasto y estado de la IA, nodo actual y sus notas. */
+function pintarPanel(p) {
+  $('panel-gm').hidden = false;
+  const ia = p.ia;
+  const estado = $('ia-estado');
+  estado.className = `ia-estado${p.gasto?.nivel === 'aviso' ? ' aviso-gasto' : p.gasto?.nivel === 'agotado' ? ' agotado' : ''}`;
+  const usd = (n) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`);
+  const gasto = p.gasto ? `IA: ${usd(p.gasto.gastado)} de $${p.gasto.tope.toFixed(2)}` : 'IA no disponible';
+  estado.textContent = ia ? `${gasto} · ${ia.perfil} · ${ia.pensando ? 'pensando…' : ia.pausada ? 'pausada' : 'activa'}` : `${gasto} · GM humano`;
+  $('narrar-escena').hidden = $('pausar-ia').hidden = $('deshacer-ia').hidden = !ia;
+  if (ia) {
+    $('pausar-ia').textContent = ia.pausada ? 'Reanudar IA' : 'Pausar IA';
+    $('pausar-ia').dataset.pausada = ia.pausada;
+    $('narrar-escena').disabled = ia.pausada || ia.pensando;
+    $('deshacer-ia').disabled = !ia.puede_deshacer;
+  }
+  $('nodo').replaceChildren(...p.nodos.map((n) => new Option(`${n.id}. ${n.titulo}`, n.id)));
+  if (p.nodo) $('nodo').value = p.nodo.id;
+  $('notas-nodo').textContent = p.nodo ? `Notas: ${p.nodo.notas || '—'} · Salidas: ${p.salidas.map((s) => `${s.hasta} (${s.etiqueta})`).join(', ') || 'ninguna'}` : '';
+}
+
+$('narrar-escena').addEventListener('click', () => servidor.enviar({ tipo: 'narrar_escena' }));
+$('pausar-ia').addEventListener('click', () => servidor.enviar({ tipo: 'pausar_ia', pausada: $('pausar-ia').dataset.pausada !== 'true' }));
+$('deshacer-ia').addEventListener('click', () => servidor.enviar({ tipo: 'deshacer_ia' }));
+$('nodo').addEventListener('change', () => servidor.enviar({ tipo: 'cambiar_nodo', nodo_id: $('nodo').value }));
+
 const codigoEscrito = () => $('codigo').value.replace(/\s/g, '').toUpperCase();
 
 $('codigo').addEventListener('input', () => {
@@ -99,7 +132,8 @@ $('codigo').addEventListener('input', () => {
 });
 $('unirse').addEventListener('click', () =>
   servidor.enviar({ tipo: 'unirse', codigo: codigoEscrito(), personaje_id: $('personaje').value }));
-$('crear').addEventListener('click', () => servidor.enviar({ tipo: 'crear_sesion', campana_id: $('campana').value }));
+$('crear').addEventListener('click', () =>
+  servidor.enviar({ tipo: 'crear_sesion', campana_id: $('campana').value, gm_perfil_id: $('gm-tipo').value || undefined }));
 
 function enviarTexto() {
   const texto = $('texto').value.trim();

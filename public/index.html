@@ -28,7 +28,10 @@
     <section class="tarjeta">
       <h2>Dirigir una partida</h2>
       <label>Campaña <select id="campana"></select></label>
+      <label>GM <select id="gm-tipo"><option value="">GM: humano</option></select></label>
+      <small id="ia-info" class="ayuda-ia"></small>
       <button id="crear">Crear sala como GM</button>
+      <a class="enlace" href="/perfiles">Editar perfiles de GM IA</a>
     </section>
   </div>
   <p id="aviso-entrada" class="aviso"></p>
@@ -46,6 +49,18 @@
   <aside id="ficha" class="ficha"></aside>
 
   <footer class="controles">
+    <div id="panel-gm" class="panel-gm" hidden>
+      <div class="fila">
+        <span id="ia-estado" class="ia-estado"></span>
+        <button id="narrar-escena" class="secundario" hidden>Narrar escena</button>
+        <button id="pausar-ia" class="secundario" hidden>Pausar IA</button>
+        <button id="deshacer-ia" class="secundario" hidden>Deshacer IA</button>
+      </div>
+      <div class="fila">
+        <label>Nodo <select id="nodo"></select></label>
+        <small id="notas-nodo" class="notas-nodo"></small>
+      </div>
+    </div>
     <p id="aviso" class="aviso"></p>
     <div class="fila">
       <textarea id="texto" rows="2" placeholder="¿Qué haces?"></textarea>
