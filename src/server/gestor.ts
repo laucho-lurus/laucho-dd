@@ -24,6 +24,7 @@ type Registro = (mensaje: string, err?: unknown) => void;
 export interface OpcionesIa {
   gm: GmIa | null; // null: sin API key, la IA queda desactivada
   perfiles: AlmacenPerfiles;
+  tiempo_maximo_ms?: number;
 }
 
 /** Error de uso que se le muestra al cliente tal cual. */
@@ -49,7 +50,7 @@ export class Gestor {
           pedirTirada: (sala, autor, id, tirada, motivo, cd) => this.pedirTirada(sala, autor, id, tirada, motivo, cd),
           guardarEstado: (sala) => this.guardarEstado(sala),
           aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
-        })
+        }, ia.tiempo_maximo_ms)
       : null;
   }
 

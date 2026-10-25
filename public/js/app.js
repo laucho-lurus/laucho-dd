@@ -99,7 +99,13 @@ function mostrarPeticion(p) {
 }
 
 /** Panel privado del GM: gasto y estado de la IA, nodo actual y sus notas. */
+const ESPERA_IA_MS = 45_000;
+let relojIa = null;
+
 function pintarPanel(p) {
+  // Red de seguridad en el navegador: si no llega respuesta, no quedarse en "pensando…".
+  clearTimeout(relojIa);
+  if (p.ia?.pensando) relojIa = setTimeout(() => pintarPanel({ ...p, ia: { ...p.ia, pensando: false } }), ESPERA_IA_MS);
   $('panel-gm').hidden = false;
   const ia = p.ia;
   const estado = $('ia-estado');

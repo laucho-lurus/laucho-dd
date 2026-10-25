@@ -9,6 +9,7 @@ import { SIN_INTERVENCION, type IntervencionIa, type Sala } from './sala.ts';
 
 const AUTOR_IA = 'gm_ia';
 const EVENTOS_CONTEXTO = 20;
+export const TIEMPO_MAXIMO_MS = 45_000; // pasado esto se libera la sala aunque la API no conteste
 
 /** Lo que la mesa necesita del gestor. */
 export interface Puertos {
@@ -31,8 +32,12 @@ export class MesaIa {
   private readonly gm: GmIa | null;
   readonly perfiles: AlmacenPerfiles;
   private readonly puertos: Puertos;
+  private readonly enCurso = new WeakMap<Sala, Promise<void>>(); // una intervención a la vez por sala
 
-  constructor(gm: GmIa | null, perfiles: AlmacenPerfiles, puertos: Puertos) {
+  private readonly tiempoMaximo: number;
+
+  constructor(gm: GmIa | null, perfiles: AlmacenPerfiles, puertos: Puertos, tiempoMaximo = TIEMPO_MAXIMO_MS) {
+    this.tiempoMaximo = tiempoMaximo;
     this.gm = gm;
     this.perfiles = perfiles;
     this.puertos = puertos;
@@ -47,7 +52,7 @@ export class MesaIa {
     if (!this.gm) return 'La IA está desactivada: falta ANTHROPIC_API_KEY en el servidor';
     const perfil = await this.perfiles.buscar(perfilId);
     if (!perfil) return 'No existe ese perfil de GM';
-    sala.ia = { perfil, pausada: false, en_curso: null, puede_pg: true, ultima: SIN_INTERVENCION };
+    sala.ia = { perfil, pausada: false, puede_pg: true, ultima: SIN_INTERVENCION };
     return null;
   }
 
@@ -55,19 +60,29 @@ export class MesaIa {
   disparar(sala: Sala, disparador: string) {
     const ia = sala.ia;
     if (!this.gm || !ia || ia.pausada) return;
-    if (ia.en_curso) {
+    if (this.enCurso.has(sala)) {
       sala.enviarGm({ tipo: 'error', mensaje: 'La IA todavía está respondiendo; espera un momento' });
       return;
     }
-    ia.en_curso = this.intervenir(sala, disparador).finally(() => {
-      ia.en_curso = null;
+    // La promesa vive aquí y no en sala.ia: ese objeto se reemplaza por copias y el bloqueo quedaba colgado.
+    let reloj: NodeJS.Timeout | undefined;
+    const limite = new Promise<void>((listo) => {
+      reloj = setTimeout(() => {
+        sala.enviarGm({ tipo: 'error', mensaje: 'La IA no respondió en 45 s; sigue tú o vuelve a intentarlo' });
+        listo();
+      }, this.tiempoMaximo);
+    });
+    const intervencion = Promise.race([this.intervenir(sala, disparador), limite]).finally(() => {
+      clearTimeout(reloj);
+      this.enCurso.delete(sala);
       void this.enviarPanel(sala);
     });
+    this.enCurso.set(sala, intervencion);
   }
 
   /** Para tests y apagado: espera a que termine la intervención en curso. */
   async esperar(sala: Sala) {
-    await sala.ia?.en_curso;
+    await this.enCurso.get(sala);
   }
 
   permitirPg(sala: Sala, permitido: boolean) {
@@ -170,7 +185,7 @@ export class MesaIa {
       salidas: salidas(sala.diagrama, sala.nodoActual()),
       variables: sala.variables(),
       ia: sala.ia
-        ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: sala.ia.en_curso !== null, puede_deshacer: sala.ia.ultima.eventos.length + sala.ia.ultima.pg.length > 0, puede_pg: sala.ia.puede_pg }
+        ? { perfil: sala.ia.perfil.nombre, pausada: sala.ia.pausada, pensando: this.enCurso.has(sala), puede_deshacer: sala.ia.ultima.eventos.length + sala.ia.ultima.pg.length > 0, puede_pg: sala.ia.puede_pg }
         : null,
       ia_disponible: this.disponible(),
       gasto,

@@ -6,7 +6,6 @@ import type { PerfilGm } from '../ia/perfiles.ts';
 export interface IaSala {
   perfil: PerfilGm;
   pausada: boolean;
-  en_curso: Promise<void> | null;
   puede_pg: boolean; // casilla del GM: la IA puede aplicar daño/curación
   ultima: IntervencionIa; // lo que hizo en su última intervención (para deshacer)
 }

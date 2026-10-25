@@ -13,24 +13,26 @@ import { Perfiles } from '../ia/perfiles.ts';
 
 const BRISA = DATOS_DEMO.personajes![0].id;
 type Msj = Record<string, any>;
+const COLGADA = {} as Anthropic.Message;
 
 const respuesta = (bloques: unknown[], stop = 'tool_use') =>
   ({ content: bloques, stop_reason: stop, usage: { input_tokens: 100, output_tokens: 50 } }) as unknown as Anthropic.Message;
 const usar = (name: string, input: unknown) => ({ type: 'tool_use', id: `t-${name}-${Math.random()}`, name, input });
 
-async function mesa(respuestas: Anthropic.Message[], conIa = true) {
+async function mesa(respuestas: Anthropic.Message[], conIa = true, tiempo_maximo_ms?: number) {
   const dir = mkdtempSync(join(tmpdir(), 'mesa-ia-'));
   const llamadas: Anthropic.MessageCreateParamsNonStreaming[] = [];
   const cliente: ClienteIa = {
     crear: async (p) => {
       llamadas.push(p);
+      if (respuestas[0] === COLGADA) return new Promise(() => {}); // la API nunca contesta
       const r = respuestas.shift();
       if (!r) throw new Error('API caída');
       return r;
     },
   };
   const gm = conIa ? new GmIa({ cliente, presupuesto: new Presupuesto(join(dir, 'gasto.json'), 5) }) : null;
-  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {}, { gm, perfiles: new Perfiles(join(dir, 'perfiles.json')) });
+  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {}, { gm, perfiles: new Perfiles(join(dir, 'perfiles.json')), tiempo_maximo_ms });
   const conectar = () => {
     const recibidos: Msj[] = [];
     const c = gestor.conectar({ enviar: (m) => recibidos.push(m as Msj) });
@@ -183,4 +185,44 @@ test('con la casilla apagada la IA no puede tocar los PG', async () => {
   await gestor.esperarIa(codigo);
   assert.ok(!llamadas[0].tools!.some((t) => 'name' in t && t.name === 'aplicar_pg'));
   assert.equal(jugador.ultimo().estado.jugadores[0].pg_actual, 9);
+});
+
+test('regresión: la IA responde a varias acciones seguidas (el bloqueo se libera siempre)', async () => {
+  const narra = (t: string) => respuesta([usar('narrar', { texto: t })], 'end_turn');
+  const { gestor, humano, jugador, codigo, llamadas } = await mesa([
+    narra('Uno.'),
+    respuesta([usar('pedir_tirada', { jugador: BRISA, tirada: 'sigilo', cd: 12 })], 'end_turn'),
+    narra('Tres.'),
+    narra('Cuatro.'),
+  ]);
+  await jugador.enviar({ tipo: 'accion', texto: 'Primera' });
+  await gestor.esperarIa(codigo);
+  await jugador.enviar({ tipo: 'accion', texto: 'Segunda' }); // deja una tirada pendiente
+  await gestor.esperarIa(codigo);
+  await jugador.enviar({ tipo: 'accion', texto: 'Tercera' }); // con la tirada aún pendiente
+  await gestor.esperarIa(codigo);
+  await jugador.enviar({ tipo: 'tirar', notacion: '1d20' });
+  await gestor.esperarIa(codigo);
+  assert.equal(llamadas.length, 4);
+  assert.deepEqual(eventos(jugador).filter((e) => e.autor === 'gm_ia' && e.tipo === 'mensaje').map((e) => e.datos.texto), ['Uno.', 'Tres.', 'Cuatro.']);
+  assert.ok(!humano.recibidos.some((m) => m.tipo === 'error'));
+  assert.equal(humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!.ia.pensando, false);
+});
+
+test('regresión: tras un fallo de la API la siguiente acción vuelve a llamar', async () => {
+  const { gestor, humano, jugador, codigo, llamadas } = await mesa([]);
+  await jugador.enviar({ tipo: 'accion', texto: 'Primera' });
+  await gestor.esperarIa(codigo);
+  await jugador.enviar({ tipo: 'accion', texto: 'Segunda' });
+  await gestor.esperarIa(codigo);
+  assert.equal(llamadas.length, 2);
+  assert.equal(humano.recibidos.filter((m) => m.tipo === 'error' && /La IA falló/.test(m.mensaje)).length, 2);
+});
+
+test('si la API se cuelga, a los 45 s (aquí 20 ms) se libera la sala y el GM lo ve', async () => {
+  const { gestor, humano, codigo } = await mesa([COLGADA], true, 20);
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  assert.match(humano.recibidos.filter((m) => m.tipo === 'error').at(-1)!.mensaje, /no respondió/);
+  assert.equal(humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!.ia.pensando, false);
 });
