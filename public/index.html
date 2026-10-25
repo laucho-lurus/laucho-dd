@@ -58,7 +58,33 @@
     </details>
   </header>
 
-  <section id="narracion" class="narracion" aria-live="polite"></section>
+  <section class="centro">
+    <div class="pestanas">
+      <button class="pestana activa" data-centro="narracion">Narración</button>
+      <button class="pestana" data-centro="mapa-zona">Mapa</button>
+    </div>
+    <section id="narracion" class="narracion" aria-live="polite"></section>
+    <section id="mapa-zona" class="mapa-zona" hidden>
+      <div id="mapa-gm" class="fila mapa-gm" hidden>
+        <label>Ancho <input id="mapa-ancho" type="number" min="5" max="60" value="20"></label>
+        <label>Alto <input id="mapa-alto" type="number" min="5" max="60" value="15"></label>
+        <label>Velocidad <input id="mapa-velocidad" type="number" min="1" max="30" value="6"></label>
+        <button id="mapa-aplicar" class="secundario">Crear / ajustar mapa</button>
+        <label class="boton-archivo">Fondo… <input id="mapa-fondo" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+        <label>Niebla
+          <select id="mapa-niebla">
+            <option value="no">— (mover y medir)</option>
+            <option value="ocultar">Pincel: ocultar</option>
+            <option value="revelar">Pincel: revelar</option>
+          </select>
+        </label>
+      </div>
+      <p id="mapa-vacio" class="ayuda">El GM aún no ha creado el mapa.</p>
+      <div class="lienzo-mapa"><canvas id="mapa"></canvas></div>
+      <div id="mapa-bandeja" class="fila mapa-bandeja"></div>
+      <small id="mapa-info" class="ayuda">Arrastra tu ficha para moverte; arrastra sobre una casilla vacía para medir (1 casilla = 5 pies).</small>
+    </section>
+  </section>
 
   <aside class="lateral">
     <div class="pestanas">
@@ -177,7 +203,7 @@
       <button id="tirar">Tirar</button>
       <button id="turno" class="secundario" hidden>Siguiente turno ▸</button>
     </div>
-    <div id="dado" class="dado" aria-live="polite"><span class="cara">🎲</span><span class="resultado"></span></div>
+    <div id="dado" class="dado" aria-live="polite"><div class="escena-dado"><div class="cubo"></div></div><span class="resultado"></span></div>
   </footer>
 </div>
 

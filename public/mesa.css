@@ -44,9 +44,10 @@ input, select, textarea {
 
 /* Mesa */
 .mesa {
-  display: grid; height: 100vh; gap: 12px; padding: 12px;
+  display: grid; min-height: 100vh; gap: 12px; padding: 12px;
   grid-template-columns: 1fr 300px;
-  grid-template-rows: auto 1fr auto;
+  /* La zona central nunca baja de 380 px: si el pie del GM ocupa mucho, la página hace scroll. */
+  grid-template-rows: auto clamp(380px, calc(100vh - 320px), 2000px) auto;
   grid-template-areas: "cabecera cabecera" "narracion ficha" "controles controles";
 }
 .cabecera { grid-area: cabecera; }
@@ -67,8 +68,9 @@ input, select, textarea {
 .vida span { display: block; height: 100%; background: var(--vida); }
 .vida.baja span { background: var(--herida); }
 
+.centro { grid-area: narracion; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .narracion {
-  grid-area: narracion; overflow-y: auto;
+  flex: 1; overflow-y: auto;
   background: var(--pergamino); color: var(--tinta);
   border-radius: 8px; padding: 24px 32px;
   box-shadow: inset 0 0 40px rgba(90, 60, 20, .35);
@@ -187,3 +189,32 @@ input, select, textarea {
 .diagrama-gm { position: fixed; inset: 24px; z-index: 10; display: grid; grid-template-rows: auto 1fr; gap: 8px; background: var(--fondo); border: 1px solid var(--oro); border-radius: 10px; padding: 10px; box-shadow: 0 10px 40px #000a; }
 .diagrama-cabecera { display: flex; gap: 12px; align-items: center; color: var(--oro); }
 .diagrama-cabecera small { color: var(--tenue); flex: 1; }
+
+/* Mapa táctico */
+.mapa-zona { flex: 1; overflow: auto; background: var(--madera); border: 1px solid var(--borde); border-radius: 8px; padding: 8px; }
+.mapa-gm label { color: var(--tenue); font-size: .8rem; }
+.mapa-gm input[type=number] { width: 60px; }
+.lienzo-mapa { overflow: auto; max-width: 100%; }
+#mapa { display: block; touch-action: none; cursor: pointer; border-radius: 4px; }
+.mapa-bandeja { font-size: .8rem; color: var(--tenue); }
+.mapa-bandeja button.activo { background: var(--oro); color: var(--tinta); }
+.boton-archivo { cursor: pointer; border: 1px solid var(--oro); color: var(--oro); border-radius: 6px; padding: 4px 10px; font-size: .8rem; }
+.ficha-retrato { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2px solid var(--oro); float: right; }
+
+/* Dado 3D (CSS): gira mientras el servidor tira y se queda mostrando el total */
+.escena-dado { width: 44px; height: 44px; perspective: 300px; }
+.cubo { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .35s ease-out; }
+.cara-3d { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(145deg, #e8c46a, #b07d22); color: var(--tinta); border: 1px solid #6b4a12; border-radius: 6px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.1rem; backface-visibility: hidden; }
+.cara-3d small { position: absolute; bottom: 1px; font-size: .5rem; }
+.cara-3d:nth-child(1) { transform: rotateY(0deg) translateZ(22px); }
+.cara-3d:nth-child(2) { transform: rotateY(90deg) translateZ(22px); }
+.cara-3d:nth-child(3) { transform: rotateY(180deg) translateZ(22px); }
+.cara-3d:nth-child(4) { transform: rotateY(-90deg) translateZ(22px); }
+.cara-3d:nth-child(5) { transform: rotateX(90deg) translateZ(22px); }
+.cara-3d:nth-child(6) { transform: rotateX(-90deg) translateZ(22px); }
+.dado.girando .cubo { animation: rodar .7s linear infinite; }
+@keyframes rodar { from { transform: rotateX(0) rotateY(0) rotateZ(0); } to { transform: rotateX(360deg) rotateY(720deg) rotateZ(180deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .dado.girando .cubo { animation: none; }
+  .cubo { transition: none; }
+}

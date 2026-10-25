@@ -4,6 +4,7 @@ import { agregarEvento, pintarEnemigos, pintarFicha, pintarRetratos } from './vi
 import { detenerGiro, empezarGiro, mostrarResultado } from './dados.js';
 import { agregarChat, iniciarChat } from './chat.js';
 import { crearLienzo } from './editor/lienzo.js';
+import { crearMapaTactico } from './mapa.js';
 import { autoDisponer } from './editor/tipos.js';
 
 const LARGO_CODIGO = 6;
@@ -50,6 +51,9 @@ function recibir(m) {
       );
       $('ia-info').textContent = m.ia_disponible ? 'Con GM IA tú sigues al mando: puedes pausarla o corregirla.' : 'GM IA no disponible (falta la clave de Anthropic en el servidor).';
       return;
+    case 'mapa_gm':
+      mapaGm = m.mapa;
+      return pintarMapa();
     case 'diagrama':
       return mostrarDiagrama(m);
     case 'panel_gm':
@@ -102,6 +106,7 @@ function entrar(rol, nuevoEstado, historial) {
 
 function actualizar(nuevoEstado) {
   estado = nuevoEstado;
+  pintarMapa();
   $('que-sigue').textContent = estado.que_sigue ?? '';
   pintarEnemigos(estado.monstruos);
   const esGm = miRol?.rol === 'gm';
@@ -150,6 +155,9 @@ function pintarPanel(p) {
     $('ia-pg').checked = ia.puede_pg;
   }
   pintarMonstruosGm(p.monstruos ?? []);
+  monstruosGm = p.monstruos ?? [];
+  if (p.mapa !== undefined) mapaGm = p.mapa;
+  pintarMapa();
   const elegida = $('criatura').value;
   $('criatura').replaceChildren(...(p.criaturas ?? []).map((c) => new Option(c.nombre, c.srd_clave)));
   if (elegida) $('criatura').value = elegida;
@@ -187,6 +195,60 @@ function pintarMonstruosGm(monstruos) {
 
 $('agregar-monstruos').addEventListener('click', () =>
   servidor.enviar({ tipo: 'agregar_monstruos', srd_clave: $('criatura').value, cantidad: parseInt($('criatura-cantidad').value, 10) || 1 }));
+// Mapa táctico: el GM usa el mapa completo (con monstruos bajo la niebla); los jugadores, el del estado.
+let mapaGm = null;
+let monstruosGm = [];
+const mapaTactico = crearMapaTactico({
+  canvas: $('mapa'),
+  info: $('mapa-info'),
+  bandeja: $('mapa-bandeja'),
+  enviar: (m) => servidor.enviar(m),
+  esGm: () => miRol?.rol === 'gm',
+  miId: () => miRol?.personaje_id ?? null,
+  modoNiebla: () => $('mapa-niebla').value,
+});
+
+function pintarMapa() {
+  if (!estado) return;
+  const esGm = miRol?.rol === 'gm';
+  $('mapa-gm').hidden = !esGm;
+  const hay = mapaTactico.actualizar(esGm ? mapaGm ?? estado.mapa : estado.mapa, estado.jugadores, esGm && monstruosGm.length ? monstruosGm : estado.monstruos);
+  $('mapa-vacio').hidden = hay;
+  $('mapa').hidden = !hay;
+}
+
+$('mapa-aplicar').addEventListener('click', () => servidor.enviar({
+  tipo: 'mapa_configurar',
+  ancho: parseInt($('mapa-ancho').value, 10),
+  alto: parseInt($('mapa-alto').value, 10),
+  velocidad: parseInt($('mapa-velocidad').value, 10),
+}));
+$('mapa-fondo').addEventListener('change', async () => {
+  const archivo = $('mapa-fondo').files[0];
+  if (!archivo) return;
+  if (archivo.size > 2 * 1024 * 1024) return aviso('La imagen del mapa supera 2 MB.');
+  const lector = new FileReader();
+  lector.onload = async () => {
+    try {
+      const r = await fetch('/api/mapas/fondo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ imagen: lector.result }) });
+      const datos = await r.json();
+      if (!r.ok) return aviso(datos.error ?? 'No se pudo subir la imagen.');
+      servidor.enviar({ tipo: 'mapa_fondo', url: datos.url });
+    } catch {
+      aviso('No se pudo subir la imagen.');
+    }
+  };
+  lector.readAsDataURL(archivo);
+});
+for (const b of document.querySelectorAll('[data-centro]')) {
+  b.addEventListener('click', () => {
+    for (const x of document.querySelectorAll('[data-centro]')) x.classList.toggle('activa', x === b);
+    $('narracion').hidden = b.dataset.centro !== 'narracion';
+    $('mapa-zona').hidden = b.dataset.centro !== 'mapa-zona';
+    pintarMapa();
+  });
+}
+
 // Diagrama en solo lectura: el GM ve dónde está la partida y salta a otro nodo con un clic.
 let lienzoGm = null;
 function mostrarDiagrama({ diagrama, nodo_actual }) {
@@ -243,7 +305,7 @@ $('texto').addEventListener('keydown', (e) => {
 function tirar(notacion) {
   if (!notacion) return;
   aviso('');
-  empezarGiro();
+  empezarGiro(notacion);
   servidor.enviar({ tipo: 'tirar', notacion });
 }
 document.querySelectorAll('[data-dado]').forEach((b) => b.addEventListener('click', () => tirar(b.dataset.dado)));
