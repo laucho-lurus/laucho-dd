@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Arma, Campana, Caracteristicas, EstadoSesion, Personaje, Sesion } from './repositorio.ts';
 import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
 import type { PerfilGm } from '../ia/perfiles.ts';
+import { cambiarNiebla, crearMapa, moverFicha, quitarFicha, validarMovimiento, vistaJugadores, type Mapa, type Posicion } from '../rules/mapa.ts';
 import { MAX_MONSTRUOS_VIVOS, monstruoPublico, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 
 /** GM IA de la sala: el GM humano sigue al mando y puede pausarlo. */
@@ -70,6 +71,7 @@ export interface EstadoSala {
   ronda: number;
   max_jugadores: number;
   monstruos: ReturnType<typeof monstruoPublico>[]; // sin cifras: los PG exactos solo los ve el GM
+  mapa: Mapa | null; // vista de jugadores: sin monstruos bajo la niebla
   que_sigue: string; // franja "Qué sigue", calculada sin IA
 }
 
@@ -110,6 +112,7 @@ export class Sala {
   ia: IaSala | null = null;
   ia_pensando = false;
   private monstruos: Monstruo[] = [];
+  private mapa: Mapa | null = null;
   private proximoMonstruo = 1;
 
   constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], hashTokenGm: string | null) {
@@ -308,8 +311,47 @@ export class Sala {
       ronda: this.ronda,
       max_jugadores: MAX_JUGADORES,
       monstruos: this.monstruos.map(monstruoPublico),
+      mapa: this.mapa && vistaJugadores(this.mapa, (id) => this.monstruo(id) !== undefined),
       que_sigue: this.queSigue(),
     };
+  }
+
+  cargarMapa(mapa: Mapa | null) {
+    this.mapa = mapa;
+  }
+
+  /** El mapa con todo (para el GM y para guardar). */
+  mapaCompleto(): Mapa | null {
+    return this.mapa;
+  }
+
+  configurarMapa(ancho: number, alto: number, velocidad: number): Resultado {
+    const m = crearMapa(ancho, alto, velocidad, this.mapa);
+    if (typeof m === 'string') return error(m);
+    this.mapa = m;
+    return ok;
+  }
+
+  fondoMapa(url: string | null): Resultado {
+    if (!this.mapa) return error('Primero crea el mapa');
+    this.mapa = { ...this.mapa, fondo_url: url };
+    return ok;
+  }
+
+  /** Mueve (o coloca) una ficha. Solo personajes de la sala o monstruos del encuentro. */
+  moverEnMapa(id: string, destino: Posicion, esGm: boolean): Resultado {
+    if (!this.mapa) return error('No hay mapa en esta sala');
+    if (!this.asientos.has(id) && !this.monstruo(id)) return error('Esa ficha no está en la mesa');
+    const motivo = validarMovimiento(this.mapa, id, destino, esGm);
+    if (motivo) return error(motivo);
+    this.mapa = moverFicha(this.mapa, id, destino);
+    return ok;
+  }
+
+  niebla(celdas: Posicion[], oculta: boolean): Resultado {
+    if (!this.mapa) return error('No hay mapa en esta sala');
+    this.mapa = cambiarNiebla(this.mapa, celdas, oculta);
+    return ok;
   }
 
   /** Restaura los monstruos guardados (servidor reiniciado). */
@@ -349,6 +391,7 @@ export class Sala {
   quitarMonstruo(id: string): Resultado {
     if (!this.monstruo(id)) return error('Ese monstruo no está en la mesa');
     this.monstruos = this.monstruos.filter((m) => m.id !== id);
+    if (this.mapa) this.mapa = quitarFicha(this.mapa, id);
     return ok;
   }
 

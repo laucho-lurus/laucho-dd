@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Monstruo } from '../rules/monstruos.ts';
-import type { Campana, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import type { Campana, Encuentro, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 export interface DatosIniciales {
   campanas?: Campana[];
@@ -13,7 +12,7 @@ export class RepositorioMemoria implements Repositorio {
   private personajes: readonly Personaje[];
   private readonly sesiones = new Map<string, Sesion>(); // por código
   private readonly eventos: Evento[] = [];
-  private readonly encuentros = new Map<string, Monstruo[]>(); // sesion_id → monstruos
+  private readonly encuentros = new Map<string, Encuentro>(); // sesion_id → monstruos y mapa
 
   constructor(datos: DatosIniciales = {}) {
     this.campanas = new Map((datos.campanas ?? []).map((c) => [c.id, c]));
@@ -68,12 +67,12 @@ export class RepositorioMemoria implements Repositorio {
     return []; // la demo usa el SRD local
   }
 
-  async monstruosDeSesion(sesionId: string) {
-    return this.encuentros.get(sesionId) ?? [];
+  async encuentroDeSesion(sesionId: string): Promise<Encuentro> {
+    return structuredClone(this.encuentros.get(sesionId) ?? { monstruos: [], mapa: null });
   }
 
-  async guardarMonstruos(sesionId: string, monstruos: Monstruo[]) {
-    this.encuentros.set(sesionId, monstruos.map((m) => ({ ...m })));
+  async guardarEncuentro(sesionId: string, encuentro: Encuentro) {
+    this.encuentros.set(sesionId, structuredClone(encuentro));
   }
 
   async guardarTokenGm(sesionId: string, hash: string) {

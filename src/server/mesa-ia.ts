@@ -253,6 +253,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
       gasto,
       avisos: await this.puertos.repo.avisosBase().catch(() => []),
       monstruos: sala.listaMonstruos(), // con PG exactos: solo para el GM
+      mapa: sala.mapaCompleto(), // con los monstruos bajo la niebla
       criaturas: await this.puertos.criaturas(sala).catch(() => []),
     });
   }

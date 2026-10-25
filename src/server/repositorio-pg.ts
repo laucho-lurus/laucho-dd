@@ -1,6 +1,6 @@
 import pg from 'pg';
-import { plantillaDeCriatura, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
-import { MIGRACION_001, MIGRACION_002, type Campana, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
+import { plantillaDeCriatura, type Plantilla } from '../rules/monstruos.ts';
+import { MIGRACION_001, MIGRACION_002, type Campana, type Encuentro, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
@@ -179,17 +179,17 @@ export class RepositorioPg implements Repositorio {
     return r.rows.map(plantillaDeCriatura).filter((p): p is Plantilla => p !== null);
   }
 
-  async monstruosDeSesion(sesionId: string) {
+  async encuentroDeSesion(sesionId: string): Promise<Encuentro> {
     const r = await this.pool.query<{ participantes: unknown }>(
       'select participantes from encuentros where sesion_id = $1 and activo limit 1',
       [sesionId],
     );
-    const p = r.rows[0]?.participantes as { monstruos?: Monstruo[] } | undefined;
-    return Array.isArray(p?.monstruos) ? p.monstruos : [];
+    const p = r.rows[0]?.participantes as Partial<Encuentro> | undefined;
+    return { monstruos: Array.isArray(p?.monstruos) ? p.monstruos : [], mapa: p?.mapa ?? null };
   }
 
-  async guardarMonstruos(sesionId: string, monstruos: Monstruo[]) {
-    const participantes = JSON.stringify({ monstruos });
+  async guardarEncuentro(sesionId: string, encuentro: Encuentro) {
+    const participantes = JSON.stringify(encuentro);
     const r = await this.pool.query('update encuentros set participantes = $2 where sesion_id = $1 and activo', [sesionId, participantes]);
     if (r.rowCount === 0) {
       await this.pool.query('insert into encuentros (sesion_id, participantes) values ($1, $2)', [sesionId, participantes]);

@@ -21,6 +21,10 @@ export type MensajeCliente =
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
   | { tipo: 'ver_diagrama' }
+  | { tipo: 'mapa_configurar'; ancho: number; alto: number; velocidad: number }
+  | { tipo: 'mapa_fondo'; url: string | null }
+  | { tipo: 'mover_ficha'; id: string; x: number; y: number }
+  | { tipo: 'niebla'; celdas: { x: number; y: number }[]; oculta: boolean }
   | { tipo: 'agregar_monstruos'; srd_clave: string; cantidad: number }
   | { tipo: 'quitar_monstruo'; monstruo_id: string }
   | { tipo: 'monstruo_pg'; monstruo_id: string; cantidad: number }
@@ -160,6 +164,35 @@ export function validarMensaje(crudo: string): Validacion {
       const cantidad = entero(m, 'cantidad', -MAX_PG_CAMBIO, MAX_PG_CAMBIO);
       if (esError(cantidad) || !cantidad) return falla('"cantidad" debe ser un entero distinto de 0');
       return bien({ tipo: 'monstruo_pg', monstruo_id, cantidad });
+    }
+    case 'mapa_configurar': {
+      const ancho = entero(m, 'ancho', 1, 100);
+      const alto = entero(m, 'alto', 1, 100);
+      const velocidad = entero(m, 'velocidad', 1, 100);
+      if (esError(ancho) || esError(alto) || esError(velocidad) || !ancho || !alto) return falla('"ancho", "alto" y "velocidad" deben ser enteros');
+      return bien({ tipo: 'mapa_configurar', ancho, alto, velocidad: velocidad ?? 6 });
+    }
+    case 'mapa_fondo': {
+      if (m.url === null) return bien({ tipo: 'mapa_fondo', url: null });
+      // Solo imágenes subidas a este servidor.
+      if (typeof m.url !== 'string' || !/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/.test(m.url)) return falla('Fondo inválido: sube la imagen primero');
+      return bien({ tipo: 'mapa_fondo', url: m.url });
+    }
+    case 'mover_ficha': {
+      const id = texto(m, 'id', MAX_ID);
+      const x = entero(m, 'x', -1000, 1000);
+      const y = entero(m, 'y', -1000, 1000);
+      if (esError(id)) return falla(id.error);
+      if (esError(x) || esError(y) || x === undefined || y === undefined) return falla('"x" e "y" deben ser enteros');
+      return bien({ tipo: 'mover_ficha', id, x, y });
+    }
+    case 'niebla': {
+      const celdas = m.celdas;
+      if (!Array.isArray(celdas) || celdas.length > 3600 || !celdas.every((c) => Number.isInteger(c?.x) && Number.isInteger(c?.y))) {
+        return falla('"celdas" debe ser una lista de {x, y} (máx. 3600)');
+      }
+      if (typeof m.oculta !== 'boolean') return falla('"oculta" debe ser true o false');
+      return bien({ tipo: 'niebla', celdas: celdas.map((c: { x: number; y: number }) => ({ x: c.x, y: c.y })), oculta: m.oculta });
     }
     case 'chat': {
       const t = texto(m, 'texto', MAX_CHAT);

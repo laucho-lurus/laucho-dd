@@ -1,5 +1,4 @@
-import type { Monstruo } from '../rules/monstruos.ts';
-import type { Campana, EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
+import type { Campana, Encuentro, EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
 
 /**
  * Une dos repositorios: las campañas del `local` (la demo en memoria) se quedan ahí,
@@ -71,12 +70,12 @@ export class RepositorioMixto implements Repositorio {
     return (await this.para(campanaId)).criaturasDeCampana(campanaId);
   }
 
-  async monstruosDeSesion(sesionId: string) {
-    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).monstruosDeSesion(sesionId);
+  async encuentroDeSesion(sesionId: string) {
+    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).encuentroDeSesion(sesionId);
   }
 
-  async guardarMonstruos(sesionId: string, monstruos: Monstruo[]) {
-    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarMonstruos(sesionId, monstruos);
+  async guardarEncuentro(sesionId: string, encuentro: Encuentro) {
+    return (this.sesionesLocales.has(sesionId) ? this.local : this.principal).guardarEncuentro(sesionId, encuentro);
   }
 
   async guardarTokenGm(sesionId: string, hash: string) {

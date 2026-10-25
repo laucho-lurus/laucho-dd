@@ -471,3 +471,53 @@ test('3b: flechas con efectos y condición, monstruos del nodo de combate y cont
   await humano.recibir(JSON.stringify({ tipo: 'deshacer_ia' }));
   assert.equal(panel().monstruos.length, 0);
 });
+
+test('mapa: cada jugador mueve solo su ficha con su velocidad, el GM mueve todo y la niebla oculta monstruos', async () => {
+  const { gestor, humano, jugador, codigo } = await mesa([], false);
+  const TORVALD = DATOS_DEMO.personajes![1].id;
+  await gestor.conectar({ enviar: () => {} }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: TORVALD }));
+  await jugador.enviar({ tipo: 'mapa_configurar', ancho: 20, alto: 15, velocidad: 6 });
+  assert.equal(jugador.ultimo().mensaje, 'Solo el GM puede hacer eso');
+  await humano.enviar({ tipo: 'mapa_configurar', ancho: 20, alto: 15, velocidad: 6 });
+  await humano.enviar({ tipo: 'agregar_monstruos', srd_clave: 'kobold', cantidad: 1 });
+  await humano.enviar({ tipo: 'mover_ficha', id: 'm1', x: 10, y: 5 });
+  await humano.enviar({ tipo: 'mover_ficha', id: TORVALD, x: 3, y: 3 });
+
+  await jugador.enviar({ tipo: 'mover_ficha', id: BRISA, x: 1, y: 1 }); // colocar
+  await jugador.enviar({ tipo: 'mover_ficha', id: BRISA, x: 9, y: 1 });
+  assert.match(jugador.ultimo().mensaje, /Demasiado lejos: 8 casillas \(40 pies\)/);
+  await jugador.enviar({ tipo: 'mover_ficha', id: BRISA, x: 3, y: 3 });
+  assert.match(jugador.ultimo().mensaje, /ocupada/);
+  await jugador.enviar({ tipo: 'mover_ficha', id: TORVALD, x: 4, y: 4 });
+  assert.match(jugador.ultimo().mensaje, /tu propia ficha/);
+  await jugador.enviar({ tipo: 'mover_ficha', id: BRISA, x: 7, y: 1 });
+  assert.deepEqual(jugador.ultimo().estado.mapa.fichas[BRISA], { x: 7, y: 1 });
+
+  await humano.enviar({ tipo: 'niebla', celdas: [{ x: 10, y: 5 }, { x: 7, y: 1 }], oculta: true });
+  const visto = jugador.ultimo().estado.mapa;
+  assert.ok(!('m1' in visto.fichas)); // el kobold queda oculto…
+  assert.ok(BRISA in visto.fichas); // …pero los personajes no
+  assert.ok('m1' in humano.recibidos.filter((m) => m.tipo === 'mapa_gm').at(-1)!.mapa.fichas); // el GM lo ve todo
+  await humano.enviar({ tipo: 'quitar_monstruo', monstruo_id: 'm1' });
+  assert.ok(!('m1' in humano.recibidos.filter((m) => m.tipo === 'panel_gm').at(-1)!.mapa.fichas));
+});
+
+test('mapa: se guarda y vuelve tras reiniciar; el fondo solo acepta imágenes subidas', async () => {
+  const repo = new RepositorioMemoria(DATOS_DEMO);
+  const dir = mkdtempSync(join(tmpdir(), 'mapa-'));
+  const opciones = () => ({ gm: null, perfiles: new Perfiles(join(dir, 'p.json')) });
+  const r1: Msj[] = [];
+  const gm = new Gestor(repo, () => {}, opciones()).conectar({ enviar: (m) => r1.push(m as Msj) });
+  await gm.recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID }));
+  const codigo = r1.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  await gm.recibir(JSON.stringify({ tipo: 'mapa_configurar', ancho: 12, alto: 10, velocidad: 5 }));
+  await gm.recibir(JSON.stringify({ tipo: 'mapa_fondo', url: 'https://malicioso.example/x.png' }));
+  assert.match(r1.at(-1)!.mensaje, /Fondo inválido/);
+  await gm.recibir(JSON.stringify({ tipo: 'mapa_fondo', url: '/uploads/11111111-1111-4111-8111-111111111111.png' }));
+  await gm.recibir(JSON.stringify({ tipo: 'niebla', celdas: [{ x: 0, y: 0 }], oculta: true }));
+
+  const r2: Msj[] = [];
+  await new Gestor(repo, () => {}, opciones()).conectar({ enviar: (m) => r2.push(m as Msj) }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
+  const mapa = r2.find((m) => m.tipo === 'bienvenida')!.estado.mapa;
+  assert.deepEqual([mapa.ancho, mapa.alto, mapa.velocidad, mapa.ocultas, mapa.fondo_url], [12, 10, 5, [0], '/uploads/11111111-1111-4111-8111-111111111111.png']);
+});

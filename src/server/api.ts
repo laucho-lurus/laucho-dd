@@ -2,7 +2,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { ALINEAMIENTOS, CLASES, METODOS, RAZAS } from '../rules/personaje.ts';
-import { crearPersonaje, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
+import { randomUUID } from 'node:crypto';
+import { crearPersonaje, leerImagen, MAX_IMAGEN_BYTES, TiradasCaracteristicas, type Dependencias } from './creacion.ts';
 import type { Repositorio } from './repositorio.ts';
 import { normalizarCampana, validarDiagrama } from '../rules/diagrama.ts';
 import { unirCriaturas } from '../rules/monstruos.ts';
@@ -131,6 +132,24 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles) {
           return true;
         }
         json(res, id ? 200 : 201, { perfil: await perfiles.guardarPerfil(id, v.perfil) });
+        return true;
+      }
+      if (req.method === 'POST' && ruta === '/api/mapas/fondo') {
+        let cuerpo: Record<string, unknown>;
+        try {
+          cuerpo = (await leerJson(req)) as Record<string, unknown>;
+        } catch (err) {
+          json(res, err instanceof CuerpoDemasiadoGrande ? 413 : 400, { error: err instanceof CuerpoDemasiadoGrande ? 'La imagen supera 2 MB' : 'Petición inválida' });
+          return true;
+        }
+        const imagen = leerImagen(cuerpo?.imagen);
+        if (!imagen.ok) {
+          json(res, 400, { error: imagen.error });
+          return true;
+        }
+        const archivo = `${randomUUID()}.${imagen.valor.ext}`;
+        await deps.guardarArchivo(archivo, imagen.valor.contenido);
+        json(res, 201, { url: `/uploads/${archivo}` });
         return true;
       }
       if (req.method === 'POST' && ruta === '/api/caracteristicas/tirar') {

@@ -191,7 +191,9 @@ export class Gestor {
     if (!campana) return null;
     const personajes = await this.repo.personajesDeCampana(campana.id);
     const sala = new Sala(sesion, campana, personajes, sesion.gm_token_hash ?? null); // sin migración 002 no hay hash: el GM no puede volver
-    sala.cargarMonstruos(await this.repo.monstruosDeSesion(sesion.id));
+    const encuentro = await this.repo.encuentroDeSesion(sesion.id);
+    sala.cargarMonstruos(encuentro.monstruos);
+    sala.cargarMapa(encuentro.mapa);
     if (sesion.ia_perfil_id && this.ia?.disponible()) {
       const error = await this.ia.activar(sala, sesion.ia_perfil_id);
       if (error) this.registro(`[sala] no se pudo retomar el GM IA de ${codigo}: ${error}`);
@@ -326,6 +328,23 @@ export class Gestor {
         if (error) throw new ErrorDeJuego(error);
         return this.ia!.enviarPanel(sala);
       }
+      case 'mapa_configurar':
+      case 'mapa_fondo':
+      case 'niebla': {
+        soloGm(quien);
+        const r = m.tipo === 'mapa_configurar' ? sala.configurarMapa(m.ancho, m.alto, m.velocidad)
+          : m.tipo === 'mapa_fondo' ? sala.fondoMapa(m.url)
+          : sala.niebla(m.celdas, m.oculta);
+        if (!r.ok) throw new ErrorDeJuego(r.error);
+        return this.cambioDeMapa(sala);
+      }
+      case 'mover_ficha': {
+        // Cada jugador mueve solo su ficha y con su velocidad; el GM mueve cualquiera.
+        if (quien.rol === 'jugador' && quien.personaje_id !== m.id) throw new ErrorDeJuego('Solo puedes mover tu propia ficha');
+        const r = sala.moverEnMapa(m.id, { x: m.x, y: m.y }, quien.rol === 'gm');
+        if (!r.ok) throw new ErrorDeJuego(r.error);
+        return this.cambioDeMapa(sala);
+      }
       case 'ver_diagrama':
         soloGm(quien); // el diagrama lleva notas secretas
         return cliente.enviar({ tipo: 'diagrama', diagrama: sala.diagrama, nodo_actual: sala.nodoActual(), variables: sala.variables() });
@@ -423,11 +442,19 @@ export class Gestor {
     return `${texto} (${r.monstruo.nombre}: ${r.monstruo.pg_actual}/${r.monstruo.pg_max} PG)`;
   }
 
+  /** Difunde el mapa (vista de jugadores en el estado; completo al GM) y lo guarda. Sin evento: se mueve a menudo. */
+  private async cambioDeMapa(sala: Sala) {
+    sala.difundir({ tipo: 'estado', estado: sala.estado() });
+    sala.enviarGm({ tipo: 'mapa_gm', mapa: sala.mapaCompleto() });
+    await this.guardarMonstruos(sala);
+  }
+
+  /** Guarda monstruos y mapa del encuentro. */
   private async guardarMonstruos(sala: Sala) {
     try {
-      await this.repo.guardarMonstruos(sala.sesion.id, sala.listaMonstruos());
+      await this.repo.guardarEncuentro(sala.sesion.id, { monstruos: sala.listaMonstruos(), mapa: sala.mapaCompleto() });
     } catch (err) {
-      this.registro('[sala] no se pudieron guardar los monstruos:', err); // la memoria manda
+      this.registro('[sala] no se pudo guardar el encuentro:', err); // la memoria manda
     }
   }
 

@@ -3,6 +3,13 @@
 
 import type { Diagrama, Variables } from '../rules/aventura.ts';
 import type { Monstruo, Plantilla } from '../rules/monstruos.ts';
+import type { Mapa } from '../rules/mapa.ts';
+
+/** Lo que se guarda del encuentro activo de una sesión (encuentros.participantes). */
+export interface Encuentro {
+  monstruos: Monstruo[];
+  mapa: Mapa | null;
+}
 
 export const MIGRACION_001 = 'Falta aplicar la migración 001 (db/migraciones/001_sesiones_variables.sql)';
 export const MIGRACION_002 = 'Falta aplicar la migración 002 (db/migraciones/002_gm_token.sql): el GM no podrá volver a entrar tras reiniciar';
@@ -110,9 +117,9 @@ export interface Repositorio {
   guardarTokenGm(sesionId: string, hash: string): Promise<void>;
   /** Criaturas disponibles para la campaña (tabla criaturas: de la campaña o globales). */
   criaturasDeCampana(campanaId: string): Promise<Plantilla[]>;
-  /** Monstruos del encuentro activo de la sesión (encuentros.participantes). */
-  monstruosDeSesion(sesionId: string): Promise<Monstruo[]>;
-  guardarMonstruos(sesionId: string, monstruos: Monstruo[]): Promise<void>;
+  /** Monstruos y mapa del encuentro activo de la sesión (encuentros.participantes). */
+  encuentroDeSesion(sesionId: string): Promise<Encuentro>;
+  guardarEncuentro(sesionId: string, encuentro: Encuentro): Promise<void>;
   /** Avisos para el GM sobre la base de datos (p. ej. migraciones pendientes). */
   avisosBase(): Promise<string[]>;
   registrarEvento(evento: NuevoEvento): Promise<Evento>;
