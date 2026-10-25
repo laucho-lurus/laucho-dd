@@ -1,5 +1,6 @@
 // A qué pertenece cada imagen (columna imagenes.pertenece_a) y la lista de imágenes de una campaña.
 import type { Diagrama } from './aventura.ts';
+import { SRD_MONSTRUOS } from './monstruos.ts';
 
 export const TIPOS_IMAGEN = ['criatura', 'pnj', 'nodo', 'fondo', 'personaje'] as const;
 export type TipoImagen = (typeof TIPOS_IMAGEN)[number];
@@ -52,6 +53,8 @@ export function imagenesDeCampana(campanaId: string, diagrama: Diagrama, criatur
     vistas.add(c.srd_clave);
     lista.push({ pertenece_a: `criatura:${c.srd_clave}`, tipo: 'criatura', nombre: `Monstruo: ${c.nombre}` });
   }
-  for (const clave of enCombate) if (!vistas.has(clave)) lista.push({ pertenece_a: `criatura:${clave}`, tipo: 'criatura', nombre: `Monstruo: ${clave}` });
+  for (const clave of enCombate) {
+    if (!vistas.has(clave)) lista.push({ pertenece_a: `criatura:${clave}`, tipo: 'criatura', nombre: `Monstruo: ${SRD_MONSTRUOS[clave]?.nombre ?? clave}` });
+  }
   return lista;
 }

@@ -10,7 +10,7 @@
     "dev:neon": "node --env-file=.env --watch src/server/main.ts --demo",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc",
-    "seed:molino": "node --env-file=.env db/seed/molino.ts"
+    "seed": "node --env-file-if-exists=.env db/seed/seed.ts"
   },
   "engines": {
     "node": ">=22.18"
