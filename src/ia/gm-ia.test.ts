@@ -78,19 +78,40 @@ test('el prompt lleva perfil, nodo con notas y salidas, variables y fichas', () 
   assert.match(p, /QUÉ PASÓ AHORA: Brisa entra al túnel/);
 });
 
-test('acción → pedir_tirada → narración, con system cacheado y sin pasar de 500 tokens', async () => {
+test('narrar + pedir_tirada: 1 sola llamada, 1 narración y 1 tirada; sin texto de cierre', async () => {
   const { cliente, peticiones } = clienteFalso([
-    respuesta([herramienta('pedir_tirada', { jugador: 'pj1', tirada: 'percepcion', cd: 10, motivo: 'Huellas' })]),
-    respuesta([herramienta('narrar', { texto: 'Brisa se agacha junto a las huellas…' })], 'end_turn'),
+    respuesta([
+      { type: 'text', text: 'Voy a narrar y pedir una tirada.' },
+      herramienta('narrar', { texto: 'El barro guarda huellas pequeñas…' }),
+      herramienta('pedir_tirada', { jugador: 'pj1', tirada: 'percepcion', cd: 10, motivo: 'Huellas' }),
+    ]),
+    respuesta([{ type: 'text', text: 'La narración está publicada y pedí una tirada.' }], 'end_turn'),
   ]);
   const { acciones, hechas } = accionesFalsas();
   await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'Brisa busca huellas', acciones, () => {});
-  assert.deepEqual(hechas, ['tirada:pj1:percepcion:10:Huellas', 'narrar:Brisa se agacha junto a las huellas…']);
+  assert.deepEqual(hechas, ['narrar:El barro guarda huellas pequeñas…', 'tirada:pj1:percepcion:10:Huellas']);
+  assert.equal(peticiones.length, 1);
   assert.equal(peticiones[0].max_tokens, 500);
   assert.equal(peticiones[0].model, 'claude-haiku-5-5');
   assert.deepEqual((peticiones[0].system as Anthropic.TextBlockParam[])[0].cache_control, { type: 'ephemeral' });
-  const segunda = peticiones[1].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
-  assert.equal(segunda[0].content, 'tirada pedida');
+  assert.match(promptSistema(PERFILES_INICIALES[0]), /Nunca escribas texto fuera de las herramientas/);
+});
+
+test('el texto de cierre tras herramientas no se publica, y solo se narra una vez', async () => {
+  const { cliente } = clienteFalso([
+    respuesta([herramienta('avanzar_nodo', { nodo_id: '2' }, 'a'), herramienta('narrar', { texto: 'Uno' }, 'b'), herramienta('narrar', { texto: 'Dos' }, 'c')]),
+    respuesta([{ type: 'text', text: 'Listo, avancé y narré.' }], 'end_turn'),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', acciones, () => {});
+  assert.deepEqual(hechas, ['nodo:2', 'narrar:Uno']);
+});
+
+test('si responde solo con texto (sin herramientas), se publica como narración', async () => {
+  const { cliente } = clienteFalso([respuesta([{ type: 'text', text: 'La mina cruje.' }], 'end_turn')]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', acciones, () => {});
+  assert.deepEqual(hechas, ['narrar:La mina cruje.']);
 });
 
 test('avanzar_nodo a una salida inválida y variables inexistentes se rechazan', async () => {

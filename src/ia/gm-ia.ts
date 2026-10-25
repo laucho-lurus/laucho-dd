@@ -47,7 +47,10 @@ Reglas que siempre cumples:
 - Daño y curación: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
 - Solo avanzas a las salidas listadas del nodo actual ("avanzar_nodo") y solo cambias variables que ya existen ("fijar_variable").
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
-- Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.`;
+- Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.
+- Nunca escribas texto fuera de las herramientas; no confirmes lo que acabas de hacer; narra una sola vez por intervención.
+- Al pedir una tirada, termina tu intervención: narrarás el resultado cuando llegue.
+- Los mensajes "[chat de mesa]" son de los jugadores entre sí: tenlos en cuenta como contexto, pero no necesitan respuesta.`;
 
 const HERRAMIENTAS: Anthropic.Tool[] = [
   {
@@ -153,13 +156,15 @@ QUÉ PASÓ AHORA: ${disparador}`;
 
 /** Valida una llamada a herramienta contra el contexto y la ejecuta. Devuelve el texto del resultado. */
 async function ejecutar(
-  uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acciones, cuenta: { pg: number },
+  uso: Anthropic.ToolUseBlock, c: Contexto, acciones: Acciones, cuenta: { pg: number; narraciones: number },
 ): Promise<{ texto: string; error: boolean }> {
   const e = uso.input as Record<string, unknown>;
   const falla = (texto: string) => ({ texto, error: true });
   switch (uso.name) {
     case 'narrar':
       if (typeof e.texto !== 'string' || !e.texto.trim()) return falla('Falta el texto');
+      if (cuenta.narraciones >= 1) return falla('Ya narraste en esta intervención; no repitas');
+      cuenta.narraciones += 1;
       return { texto: await acciones.narrar(e.texto.trim()), error: false };
     case 'pedir_tirada': {
       if (!c.jugadores.some((j) => j.personaje_id === e.jugador)) return falla('Ese jugador no está en la mesa; usa un id de la lista');
@@ -222,7 +227,7 @@ export class GmIa {
    */
   async turno(contexto: () => Promise<Contexto>, disparador: string, acciones: Acciones, avisar: Aviso): Promise<void> {
     let c = await contexto();
-    const cuenta = { pg: 0 };
+    const cuenta = { pg: 0, narraciones: 0 };
     const herramientas = c.permitir_pg ? HERRAMIENTAS : HERRAMIENTAS.filter((h) => h.name !== 'aplicar_pg');
     const sistema: Anthropic.TextBlockParam[] = [{ type: 'text', text: promptSistema(c.perfil), cache_control: { type: 'ephemeral' } }];
     const mensajes: Anthropic.MessageParam[] = [{ role: 'user', content: promptContexto(c, disparador) }];
@@ -244,21 +249,25 @@ export class GmIa {
       if (despues.nivel !== antes.nivel) avisar(despues.nivel, despues);
 
       const usos = respuesta.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-      // Si contestó en texto plano en vez de usar "narrar", lo publicamos igual.
-      const suelto = respuesta.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
       if (usos.length === 0) {
-        if (suelto) await acciones.narrar(suelto);
+        // Solo si no usó ninguna herramienta en toda la intervención publicamos su texto suelto;
+        // después de herramientas, el texto libre suele ser un "ya lo hice" que repite lo anterior.
+        const suelto = respuesta.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
+        if (vuelta === 0 && suelto) await acciones.narrar(suelto);
         return;
       }
       const resultados: Anthropic.ToolResultBlockParam[] = [];
       let soloNarro = true;
+      let pidioTirada = false;
       for (const uso of usos) {
         const r = await ejecutar(uso, c, acciones, cuenta);
         resultados.push({ type: 'tool_result', tool_use_id: uso.id, content: r.texto, ...(r.error && { is_error: true }) });
         soloNarro &&= uso.name === 'narrar' && !r.error;
+        pidioTirada ||= uso.name === 'pedir_tirada' && !r.error;
       }
-      // Ya habló a los jugadores: otra vuelta solo serviría para repetirse (y gastar).
-      if (respuesta.stop_reason !== 'tool_use' || soloNarro) return;
+      // Ya habló a los jugadores, o espera una tirada (la narración llegará con su resultado):
+      // otra vuelta solo serviría para repetirse y gastar.
+      if (respuesta.stop_reason !== 'tool_use' || soloNarro || pidioTirada) return;
       mensajes.push({ role: 'assistant', content: respuesta.content }, { role: 'user', content: resultados });
       c = await contexto();
     }
