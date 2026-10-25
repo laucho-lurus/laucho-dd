@@ -104,8 +104,14 @@ test('avanzar_nodo a una salida inválida y variables inexistentes se rechazan',
   assert.deepEqual(hechas, ['nodo:2', 'var:antorchas_encendidas=true']);
 });
 
+test('si en una vuelta solo narró, no vuelve a llamar', async () => {
+  const { cliente, peticiones } = clienteFalso([respuesta([herramienta('narrar', { texto: 'La escena…' })]), respuesta([])]);
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', accionesFalsas().acciones, () => {});
+  assert.equal(peticiones.length, 1);
+});
+
 test('máximo 3 vueltas por disparador', async () => {
-  const otra = () => respuesta([herramienta('narrar', { texto: 'y…' })]);
+  const otra = () => respuesta([herramienta('fijar_variable', { nombre: 'antorchas_encendidas', valor: true })]);
   const { cliente, peticiones } = clienteFalso([otra(), otra(), otra(), otra()]);
   await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', accionesFalsas().acciones, () => {});
   assert.equal(peticiones.length, 3);

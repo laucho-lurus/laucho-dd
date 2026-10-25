@@ -218,11 +218,14 @@ export class GmIa {
         return;
       }
       const resultados: Anthropic.ToolResultBlockParam[] = [];
+      let soloNarro = true;
       for (const uso of usos) {
         const r = await ejecutar(uso, c, acciones);
         resultados.push({ type: 'tool_result', tool_use_id: uso.id, content: r.texto, ...(r.error && { is_error: true }) });
+        soloNarro &&= uso.name === 'narrar' && !r.error;
       }
-      if (respuesta.stop_reason !== 'tool_use') return;
+      // Ya habló a los jugadores: otra vuelta solo serviría para repetirse (y gastar).
+      if (respuesta.stop_reason !== 'tool_use' || soloNarro) return;
       mensajes.push({ role: 'assistant', content: respuesta.content }, { role: 'user', content: resultados });
       c = await contexto();
     }
