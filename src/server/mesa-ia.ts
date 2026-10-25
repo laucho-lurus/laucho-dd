@@ -23,6 +23,8 @@ export interface Puertos {
   ): Promise<void>;
   agregarMonstruos(sala: Sala, autor: string, srdClave: string, cantidad: number, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; nuevos: Monstruo[] }>;
   criaturas(sala: Sala): Promise<{ srd_clave: string; nombre: string }[]>;
+  /** Pasa a otro nodo: efectos de la flecha, monstruos del combate y anuncio. `estricto`: respeta condiciones. */
+  avanzarNodo(sala: Sala, autor: string, nodoId: string, extra: Record<string, unknown>, estricto: boolean): Promise<{ eventos: (Evento | { id: null })[]; monstruos: string[]; resumen: string }>;
   registro(mensaje: string, err?: unknown): void;
   guardarEstado(sala: Sala): Promise<void>;
   /** Aplica PG y publica el evento. Devuelve el cambio real (tras recortar a 0 y al máximo). */
@@ -175,11 +177,14 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
             return 'Tirada pedida. Espera el resultado: llegará como un nuevo evento.';
           }),
           avanzarNodo: (nodoId) => sala.encolar(async () => {
-            const r = sala.cambiarNodo(nodoId);
-            if (!r.ok) return r.error;
-            await this.puertos.guardarEstado(sala);
-            anotar(await this.puertos.publicar(sala, 'estado', AUTOR_IA, { cambio: 'nodo', nodo_id: nodoId, titulo: buscarNodo(sala.diagrama, nodoId)?.titulo, personaje_nombre: firma, ia: true }));
-            return `Ahora en el nodo ${nodoId}`;
+            try {
+              const r = await this.puertos.avanzarNodo(sala, AUTOR_IA, nodoId, { personaje_nombre: firma, ia: true }, true);
+              r.eventos.forEach(anotar);
+              agregados.push(...r.monstruos);
+              return r.resumen;
+            } catch (err) {
+              return (err as Error).message;
+            }
           }),
           agregarMonstruos: (srdClave, cantidad) => sala.encolar(async () => {
             try {

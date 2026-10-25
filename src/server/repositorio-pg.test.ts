@@ -136,3 +136,10 @@ test('guardarCampana usa columnas que existen en campanas y crea con un GM', asy
   for (const c of insert) assert.ok(cols.includes(c), c);
   assert.ok(insert.includes('gm_usuario_id')); // check (gm_usuario_id or gm_perfil_id)
 });
+
+test('las campañas nuevas usan como GM al usuario "laucho" si existe', async () => {
+  const { repo, consultas } = repoFalso();
+  await repo.guardarCampana(null, { nombre: 'X', diagrama: { nodos: [], flechas: [] }, variables: {}, resumen: '' });
+  assert.match(consultas[0].sql, /order by \(nombre = \$5\) desc/);
+  assert.equal(consultas[0].params[4], 'laucho');
+});

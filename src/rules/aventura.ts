@@ -46,3 +46,14 @@ export const nodoInicial = (d: Diagrama): Nodo | null => d.nodos[0] ?? null;
 export const buscarNodo = (d: Diagrama, id: string | null): Nodo | null => d.nodos.find((n) => n.id === id) ?? null;
 
 export const salidas = (d: Diagrama, id: string | null): Flecha[] => d.flechas.filter((f) => f.desde === id);
+
+/** "variable = valor" → ¿se cumple? null si la condición es texto libre (la juzga el GM o la IA). */
+export function evaluarCondicion(condicion: string | undefined, vars: Variables): boolean | null {
+  if (!condicion) return true;
+  const m = /^\s*([a-z_][a-z0-9_]*)\s*=\s*(.+?)\s*$/i.exec(condicion);
+  if (!m || !Object.hasOwn(vars, m[1])) return null;
+  return String(vars[m[1]]) === m[2];
+}
+
+/** La flecha que lleva de un nodo a otro, si existe. */
+export const flechaEntre = (d: Diagrama, desde: string | null, hasta: string) => d.flechas.find((f) => f.desde === desde && f.hasta === hasta);

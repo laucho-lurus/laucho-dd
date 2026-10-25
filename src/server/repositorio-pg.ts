@@ -4,6 +4,7 @@ import { MIGRACION_001, MIGRACION_002, type Campana, type EstadoSesion, type Eve
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
+const GM_POR_DEFECTO = 'laucho'; // usuario GM de las campañas nuevas del editor
 
 interface FilaEvento {
   id: string; // bigint llega como texto
@@ -80,13 +81,13 @@ export class RepositorioPg implements Repositorio {
       if (!r.rows[0]) throw new Error('No existe esa campaña');
       return r.rows[0];
     }
-    // campanas exige un GM (humano o IA): usamos el primer usuario registrado como GM humano.
+    // campanas exige un GM (humano o IA): el usuario GM por defecto ("laucho") o, si no existe, el primero registrado.
     const r = await this.pool.query<Campana>(
       `insert into campanas (nombre, diagrama, variables, resumen, gm_usuario_id)
-       select $1, $2, $3, $4, (select id from usuarios order by creado_en limit 1)
+       select $1, $2, $3, $4, (select id from usuarios order by (nombre = $5) desc, creado_en limit 1)
        where exists (select 1 from usuarios)
        returning id, nombre, diagrama, variables, resumen`,
-      params,
+      [...params, GM_POR_DEFECTO],
     );
     if (!r.rows[0]) throw new Error('Para crear campañas hace falta al menos un usuario GM en la base');
     return r.rows[0];

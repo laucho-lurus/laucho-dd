@@ -1,6 +1,6 @@
 // GM IA: arma el contexto, llama al modelo y ejecuta sus herramientas (máx. 3 vueltas por disparador).
 import type Anthropic from '@anthropic-ai/sdk';
-import { buscarNodo, salidas, type Diagrama, type Variables } from '../rules/aventura.ts';
+import { buscarNodo, salidas, type Diagrama, type Nodo, type Variables } from '../rules/aventura.ts';
 import { esChequeo, HABILIDADES } from '../rules/habilidades.ts';
 import { MIN_MOTIVO, motivoPorDefecto, motivoValido } from '../rules/tiradas.ts';
 import { estadoMonstruo, MAX_MONSTRUOS_VIVOS, type Monstruo } from '../rules/monstruos.ts';
@@ -148,6 +148,18 @@ const texto = (e: Evento) => {
   return `[${d.cambio ?? e.tipo}]`;
 };
 
+/** Lo que el editor configuró en el nodo (tirada, combate, diálogo…). La CD es secreta para los jugadores. */
+function detallesNodo(n: Nodo): string {
+  const lineas: string[] = [];
+  if (n.chequeo || n.cd) lineas.push(`Tirada configurada: ${n.chequeo ?? 'a elegir'}${n.cd ? `, CD ${n.cd} (secreta: no la digas)` : ''}. Pídela con pedir_tirada.`);
+  if (n.monstruos?.length) lineas.push(`Combate configurado: ${n.monstruos.map((m) => `${m.cantidad} × ${m.srd_clave}`).join(', ')} (el servidor ya los sacó al entrar).`);
+  if (n.opciones?.length) lineas.push(`Opciones: ${n.opciones.join(' / ')}`);
+  if (n.pnj) lineas.push(`PNJ: ${n.pnj}. Sabe: ${n.sabe || '—'}. Quiere: ${n.quiere || '—'}.`);
+  if (n.disparador) lineas.push(`Se dispara si ${n.disparador.variable} = ${n.disparador.valor}.`);
+  if (n.recompensas || n.xp) lineas.push(`Recompensas: ${n.recompensas || '—'}${n.xp ? `; XP ${n.xp}` : ''}.`);
+  return lineas.length ? `\n${lineas.join('\n')}` : '';
+}
+
 /** Mensaje con el estado actual de la partida (cambia en cada llamada). */
 export function promptContexto(c: Contexto, disparador: string): string {
   const nodo = buscarNodo(c.campana.diagrama, c.nodo_actual);
@@ -161,7 +173,7 @@ export function promptContexto(c: Contexto, disparador: string): string {
 
 NODO ACTUAL ${nodo ? `"${nodo.id}" (${nodo.tipo}): ${nodo.titulo}
 Texto: ${nodo.texto}
-Notas secretas: ${nodo.notas || '—'}` : 'ninguno'}
+Notas secretas: ${nodo.notas || '—'}${detallesNodo(nodo)}` : 'ninguno'}
 Salidas posibles:
 ${lineasSalidas.join('\n') || '- ninguna (final)'}
 

@@ -419,3 +419,55 @@ test('el GM vuelve a entrar tras reiniciar con su token; con uno inválido se re
   assert.equal(gm.find((m) => m.tipo === 'bienvenida')!.rol, 'gm');
   assert.ok(gm.some((m) => m.tipo === 'panel_gm'));
 });
+
+test('3b: flechas con efectos y condición, monstruos del nodo de combate y contexto de tirada para la IA', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'editor-juego-'));
+  const campana = {
+    id: 'c-editor',
+    nombre: 'Prueba del editor',
+    variables: { llave: false, alarma: false },
+    diagrama: {
+      nodos: [
+        { id: '1', tipo: 'tirada', titulo: 'La puerta', texto: '', notas: '', chequeo: 'atletismo', cd: 14 },
+        { id: '2', tipo: 'combate', titulo: 'Emboscada', texto: '', notas: '', monstruos: [{ srd_clave: 'kobold', cantidad: 2 }] },
+        { id: '3', tipo: 'final', titulo: 'Tesoro', texto: '', notas: '' },
+      ],
+      flechas: [
+        { desde: '1', hasta: '2', etiqueta: 'Éxito', efectos: [{ variable: 'alarma', valor: true }] },
+        { desde: '2', hasta: '3', etiqueta: 'Victoria', condicion: 'llave = true' },
+      ],
+    },
+  };
+  const repo = new RepositorioMemoria({ campanas: [campana], personajes: DATOS_DEMO.personajes!.map((p) => ({ ...p, campana_id: 'c-editor' })) });
+  const llamadas: Anthropic.MessageCreateParamsNonStreaming[] = [];
+  const guion = [
+    respuesta([usar('avanzar_nodo', { nodo_id: '2' })]),
+    respuesta([usar('avanzar_nodo', { nodo_id: '3' })]),
+    respuesta([usar('narrar', { texto: 'Necesitáis la llave.' })], 'end_turn'),
+  ];
+  const gm = new GmIa({ cliente: { crear: async (p) => (llamadas.push(p), guion.shift()!) }, presupuesto: new Presupuesto(join(dir, 'g.json'), 5) });
+  const gestor = new Gestor(repo, () => {}, { gm, perfiles: new Perfiles(join(dir, 'p.json')) });
+  const r: Msj[] = [];
+  const humano = gestor.conectar({ enviar: (m) => r.push(m as Msj) });
+  await humano.recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: 'c-editor', gm_perfil_id: 'cronista' }));
+  const codigo = r.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  await humano.recibir(JSON.stringify({ tipo: 'narrar_escena' }));
+  await gestor.esperarIa(codigo);
+
+  // (b) la IA ve la habilidad y la CD configuradas
+  assert.match(llamadas[0].messages[0].content as string, /Tirada configurada: atletismo, CD 14 \(secreta/);
+  const panel = () => r.filter((m) => m.tipo === 'panel_gm').at(-1)!;
+  // (c) efecto de la flecha 1→2 y (a) kobolds al entrar al combate
+  assert.equal(panel().nodo.id, '2');
+  assert.deepEqual(panel().variables, { llave: false, alarma: true });
+  assert.deepEqual(panel().monstruos.map((m: Msj) => m.nombre), ['Kobold 1', 'Kobold 2']);
+  // (c) la IA no puede cruzar 2→3 sin la llave…
+  const rechazo = (llamadas[2].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[])[0].content;
+  assert.match(String(rechazo), /No se cumple la condición de esa salida: llave = true/);
+  // …pero el GM humano sí puede saltar
+  await humano.recibir(JSON.stringify({ tipo: 'cambiar_nodo', nodo_id: '3' }));
+  assert.equal(panel().nodo.id, '3');
+  // deshacer IA quita los kobolds que salieron al entrar en el combate
+  await humano.recibir(JSON.stringify({ tipo: 'deshacer_ia' }));
+  assert.equal(panel().monstruos.length, 0);
+});

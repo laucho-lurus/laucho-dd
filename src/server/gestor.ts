@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { roll } from '../rules/dice.ts';
 import { tiradaDeChequeo } from '../rules/habilidades.ts';
-import { buscarNodo } from '../rules/aventura.ts';
+import { buscarNodo, evaluarCondicion, flechaEntre } from '../rules/aventura.ts';
 import { motivoPorDefecto, textoPeticion, textoTirada } from '../rules/tiradas.ts';
 import { generarCodigo } from './codigo.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
@@ -57,6 +57,7 @@ export class Gestor {
           publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
           pedirTirada: (sala, autor, id, tirada, motivo, cd, objetivo) => this.pedirTirada(sala, autor, id, tirada, motivo, cd, objetivo),
           agregarMonstruos: (sala, autor, clave, n, extra) => this.agregarMonstruos(sala, autor, clave, n, extra),
+          avanzarNodo: (sala, autor, id, extra, estricto) => this.avanzarNodo(sala, autor, id, extra, estricto),
           criaturas: async (sala) => (await this.plantillas(sala)).map(({ srd_clave, nombre }) => ({ srd_clave, nombre })),
           guardarEstado: (sala) => this.guardarEstado(sala),
           aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
@@ -330,10 +331,9 @@ export class Gestor {
         return cliente.enviar({ tipo: 'diagrama', diagrama: sala.diagrama, nodo_actual: sala.nodoActual(), variables: sala.variables() });
       case 'cambiar_nodo': {
         soloGm(quien);
-        const r = sala.cambiarNodo(m.nodo_id);
-        if (!r.ok) throw new ErrorDeJuego(r.error);
-        await this.guardarEstado(sala);
-        return this.publicar(sala, 'estado', autor, { cambio: 'nodo', nodo_id: m.nodo_id, titulo: buscarNodo(sala.diagrama, m.nodo_id)?.titulo });
+        // El GM humano puede saltar a cualquier nodo, aunque una condición no se cumpla.
+        await this.avanzarNodo(sala, autor, m.nodo_id, {}, false);
+        return;
       }
       case 'aplicar_pg': {
         soloGm(quien);
@@ -355,6 +355,39 @@ export class Gestor {
       default:
         throw new ErrorDeJuego('Ya estás en una sala');
     }
+  }
+
+  /**
+   * Cambia de nodo. Si hay una flecha desde el nodo actual, aplica sus efectos ("fijar variable");
+   * con `estricto` (la IA) exige que su condición "variable = valor" se cumpla. Al entrar en un
+   * nodo de combate saca los monstruos configurados en el editor.
+   */
+  private async avanzarNodo(sala: Sala, autor: string, nodoId: string, extra: Record<string, unknown>, estricto: boolean) {
+    const destino = buscarNodo(sala.diagrama, nodoId);
+    if (!destino) throw new ErrorDeJuego('Ese nodo no existe en la campaña');
+    const flecha = flechaEntre(sala.diagrama, sala.nodoActual(), nodoId);
+    if (estricto && flecha && evaluarCondicion(flecha.condicion, sala.variables()) === false) {
+      throw new ErrorDeJuego(`No se cumple la condición de esa salida: ${flecha.condicion}`);
+    }
+    for (const e of flecha?.efectos ?? []) sala.fijarVariable(e.variable, e.valor);
+    sala.cambiarNodo(nodoId);
+    await this.guardarEstado(sala);
+    const eventos = [await this.publicar(sala, 'estado', autor, { ...extra, cambio: 'nodo', nodo_id: nodoId, titulo: destino.titulo })];
+    const monstruos: string[] = [];
+    if (destino.tipo === 'combate') {
+      for (const m of destino.monstruos ?? []) {
+        try {
+          const r = await this.agregarMonstruos(sala, autor, m.srd_clave, m.cantidad, extra);
+          eventos.push(r.evento);
+          monstruos.push(...r.nuevos.map((x) => x.id));
+        } catch (err) {
+          sala.enviarGm({ tipo: 'error', mensaje: `No se pudieron sacar los monstruos del combate: ${(err as Error).message}` });
+        }
+      }
+    }
+    const efectos = flecha?.efectos?.length ? ` Variables: ${flecha.efectos.map((e) => `${e.variable} = ${e.valor}`).join(', ')}.` : '';
+    const entran = monstruos.length ? ` Entran ${monstruos.length} monstruos (ids ${monstruos.join(', ')}).` : '';
+    return { eventos, monstruos, resumen: `Ahora en el nodo ${nodoId}.${efectos}${entran}` };
   }
 
   /** Criaturas de la campaña (tabla criaturas) más el SRD local para las que falten. */
