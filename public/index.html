@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sala D&amp;D</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 16px; }
+  fieldset { margin-bottom: 12px; }
+  input, select, button, textarea { font: inherit; margin: 2px 0; }
+  textarea { width: 100%; box-sizing: border-box; }
+  #eventos { list-style: none; padding: 0; border: 1px solid #ccc; height: 320px; overflow-y: auto; }
+  #eventos li { padding: 4px 8px; border-bottom: 1px solid #eee; }
+  .error { color: #b00; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Sala D&amp;D</h1>
+
+<fieldset id="entrada">
+  <legend>Entrar</legend>
+  <label>Código de sala <input id="codigo" size="8" autocomplete="off"></label>
+  <button id="ver">Ver personajes</button>
+  <div>
+    <select id="personaje" hidden></select>
+    <button id="unirse" hidden>Unirse</button>
+  </div>
+  <hr>
+  <label>Campaña <input id="campana" value="00000000-0000-4000-8000-000000000001" size="38"></label>
+  <button id="crear">Crear sala (GM)</button>
+</fieldset>
+
+<fieldset id="juego" hidden>
+  <legend id="titulo">Sala</legend>
+  <p id="info"></p>
+  <textarea id="texto" rows="3" placeholder="¿Qué haces?"></textarea>
+  <button id="enviar">Enviar</button>
+  <label>Dados <input id="notacion" value="1d20" size="8"></label>
+  <button id="tirar">Tirar dado</button>
+  <button id="turno" hidden>Siguiente turno</button>
+</fieldset>
+
+<p id="aviso" class="error"></p>
+<ul id="eventos"></ul>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  let soyGm = false;
+  let estado = null;
+
+  const enviar = (m) => ws.send(JSON.stringify(m));
+  const nombre = (id) => estado?.jugadores.find((j) => j.personaje_id === id)?.nombre ?? '—';
+
+  function agregar(texto) {
+    const li = document.createElement('li');
+    li.textContent = texto;
+    $('eventos').append(li);
+    li.scrollIntoView({ block: 'end' });
+  }
+
+  function describir(e) {
+    const d = e.datos;
+    const quien = d.personaje_nombre ?? 'Sistema';
+    switch (e.tipo) {
+      case 'accion': return `${quien}: ${d.texto}`;
+      case 'mensaje': return `GM: ${d.texto}`;
+      case 'tirada': return `🎲 ${quien} tira ${d.notation}${d.motivo ? ` (${d.motivo})` : ''}: [${d.rolls.join(', ')}] → ${d.total}`;
+      case 'estado':
+        if (d.cambio === 'entra') return `${d.personaje_nombre} entra a la sala`;
+        if (d.cambio === 'turno') return `Turno de ${nombre(d.turno_de)} (ronda ${d.ronda})`;
+        return `Nuevo orden de turnos`;
+      default: return JSON.stringify(e);
+    }
+  }
+
+  function pintarEstado(s) {
+    estado = s;
+    $('titulo').textContent = `Sala ${s.codigo} — ${s.campana.nombre}`;
+    const jugadores = s.jugadores.map((j) => `${j.nombre}${j.conectado ? '' : ' (desconectado)'}`).join(', ') || 'nadie';
+    $('info').textContent = `GM: ${s.gm_conectado ? 'conectado' : 'ausente'} · Jugadores: ${jugadores} · Turno de: ${nombre(s.turno_de)} · Ronda ${s.ronda}`;
+  }
+
+  function entrarAlJuego(gm) {
+    soyGm = gm;
+    $('entrada').hidden = true;
+    $('juego').hidden = false;
+    $('turno').hidden = !gm;
+    $('texto').placeholder = gm ? 'Narra la escena…' : '¿Qué haces?';
+  }
+
+  ws.onmessage = ({ data }) => {
+    const m = JSON.parse(data);
+    $('aviso').textContent = '';
+    switch (m.tipo) {
+      case 'error': $('aviso').textContent = m.mensaje; break;
+      case 'personajes': {
+        const sel = $('personaje');
+        sel.replaceChildren(...m.personajes.map((p) => {
+          const o = new Option(`${p.nombre} — ${p.raza} ${p.clase} ${p.nivel}${p.ocupado ? ' (ocupado)' : ''}`, p.id);
+          o.disabled = p.ocupado;
+          return o;
+        }));
+        sel.hidden = $('unirse').hidden = false;
+        break;
+      }
+      case 'sesion_creada':
+        entrarAlJuego(true);
+        pintarEstado(m.estado);
+        agregar(`Sala creada. Comparte el código ${m.codigo} con los jugadores.`);
+        break;
+      case 'bienvenida':
+        entrarAlJuego(m.rol === 'gm');
+        pintarEstado(m.estado);
+        m.historial.forEach((e) => agregar(describir(e)));
+        break;
+      case 'evento':
+        pintarEstado(m.estado);
+        agregar(describir(m.evento));
+        break;
+      case 'estado': pintarEstado(m.estado); break;
+    }
+  };
+  ws.onclose = () => { $('aviso').textContent = 'Conexión perdida. Recarga la página para volver a entrar.'; };
+
+  $('ver').onclick = () => enviar({ tipo: 'ver_personajes', codigo: $('codigo').value });
+  $('unirse').onclick = () => enviar({ tipo: 'unirse', codigo: $('codigo').value, personaje_id: $('personaje').value });
+  $('crear').onclick = () => enviar({ tipo: 'crear_sesion', campana_id: $('campana').value });
+  $('enviar').onclick = () => {
+    const texto = $('texto').value.trim();
+    if (!texto) return;
+    enviar({ tipo: soyGm ? 'narracion' : 'accion', texto });
+    $('texto').value = '';
+  };
+  $('tirar').onclick = () => enviar({ tipo: 'tirar', notacion: $('notacion').value });
+  $('turno').onclick = () => enviar({ tipo: 'siguiente_turno' });
+</script>
+</body>
+</html>
