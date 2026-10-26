@@ -387,7 +387,10 @@ export class Gestor {
         const r = await this.cambiarInventario(sala, id, (inv) => beberPocion(inv, m.instancia));
         const curacion = tirar(r.extra.curacion);
         // Mismo camino que el daño y la curación del GM: tope en los PG máximos y anuncio.
-        await this.aplicarPg(sala, autor, id, curacion.total, { motivo: `${r.extra.nombre} (${curacion.notation}: [${curacion.kept.join(', ')}])` });
+        // Se anuncia lo que cura de verdad (tope en PG máx.); la tirada va en el motivo.
+        const falta = sala.personaje(id)!.pg_max - (sala.pgDe(id) ?? 0);
+        const motivo = `${r.extra.nombre}: ${curacion.notation} = ${curacion.total} [${curacion.kept.join(', ')}]`;
+        await this.aplicarPg(sala, autor, id, Math.min(curacion.total, falta), { motivo });
         return;
       }
       case 'usar_habilidad': {

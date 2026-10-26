@@ -136,6 +136,32 @@
         <p id="intro-vista" class="ayuda"></p>
         <button id="intro-mostrar" class="secundario">Mostrar a los jugadores</button>
       </details>
+      <details id="gm-objetos" class="gm-introduccion">
+        <summary>Objetos y habilidades</summary>
+        <div class="fila"><label>Para <select id="dar-a"></select></label>
+          <button id="descanso-corto" class="secundario">Descanso corto</button>
+          <button id="descanso-largo" class="secundario">Descanso largo</button></div>
+        <div class="fila"><select id="dar-item" aria-label="Objeto del catálogo"></select>
+          <input id="dar-item-cantidad" type="number" min="1" max="99" value="1" aria-label="Cantidad">
+          <button id="dar-item-boton" class="secundario">Dar objeto</button></div>
+        <div class="fila"><input id="dar-custom-nombre" maxlength="60" placeholder="Objeto inventado" aria-label="Nombre del objeto">
+          <input id="dar-custom-desc" maxlength="300" placeholder="Descripción" aria-label="Descripción del objeto">
+          <button id="dar-custom-boton" class="secundario">Dar</button></div>
+        <div class="fila"><select id="dar-habilidad" aria-label="Habilidad de clase"></select>
+          <button id="dar-habilidad-boton" class="secundario">Dar habilidad</button></div>
+        <div class="fila"><input id="dar-mov-nombre" maxlength="60" placeholder="Movimiento propio" aria-label="Nombre del movimiento">
+          <input id="dar-mov-desc" maxlength="300" placeholder="Qué hace" aria-label="Descripción del movimiento">
+          <select id="dar-mov-uso" aria-label="Usos">
+            <option value="a_voluntad">A voluntad</option>
+            <option value="por_descanso:corto">Por descanso corto</option>
+            <option value="por_descanso:largo">Por descanso largo</option>
+            <option value="una_vez">Una vez</option>
+          </select>
+          <input id="dar-mov-usos" type="number" min="1" max="10" value="1" aria-label="Usos">
+          <select id="dar-mov-a" aria-label="Modifica"><option value="ataque">Ataque</option><option value="ca">CA</option><option value="dano">Daño</option></select>
+          <input id="dar-mov-valor" type="number" min="-3" max="3" value="0" aria-label="Modificador (−3 a +3)">
+          <button id="dar-mov-boton" class="secundario">Dar</button></div>
+      </details>
       <div id="imagenes-nodo" class="imagenes-nodo"></div>
       <div id="gm-monstruos" class="gm-monstruos"></div>
       <div class="fila">

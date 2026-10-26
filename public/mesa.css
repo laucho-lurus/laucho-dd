@@ -236,3 +236,18 @@ input, select, textarea {
 .gm-introduccion textarea { width: 100%; }
 .gm-introduccion summary { cursor: pointer; color: var(--oro); font-family: 'Cinzel', serif; font-size: .85rem; }
 .enlaces-gm { display: flex; flex-wrap: wrap; gap: 12px; font-size: .85rem; }
+
+/* Inventario y habilidades en la ficha */
+.ficha h3 { margin: 14px 0 4px; color: var(--oro); font-size: 1rem; }
+.inventario { list-style: none; padding: 0; margin: 0; font-size: .9rem; }
+.inventario li { padding: 6px 0; border-top: 1px solid var(--borde); }
+.inventario li.equipado > .linea span:first-child { color: var(--oro); }
+.inventario li.gastada { opacity: .55; }
+.inventario .linea { display: flex; align-items: center; gap: 6px; }
+.inventario .linea span:first-child { flex: 1; }
+.inventario small { color: var(--tenue); display: block; }
+.inventario .linea small { display: inline; }
+button.mini { padding: 2px 8px; font-size: .8rem; }
+button.mini.quitar { background: transparent; color: var(--tenue); border: 1px solid var(--borde); }
+#gm-objetos input:not([type=number]) { flex: 1; min-width: 120px; }
+#gm-objetos input[type=number] { width: 4.5em; }

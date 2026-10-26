@@ -20,11 +20,11 @@ const lista = (opciones, valor, onchange) => el('select', { onchange }, ...opcio
  * Pinta el panel de la selección. `cambiar(fn)` aplica `fn` a una copia del estado y lo guarda en el historial.
  * Los campos guardan al salir del control (evento change) para no llenar el historial de pulsaciones.
  */
-export function pintarPanel(contenedor, estado, seleccion, { cambiar, criaturas }) {
+export function pintarPanel(contenedor, estado, seleccion, { cambiar, criaturas, items = [] }) {
   const d = estado.diagrama;
   if (seleccion?.tipo === 'nodo') {
     const n = d.nodos.find((x) => x.id === seleccion.id);
-    if (n) return contenedor.replaceChildren(...panelNodo(n, estado, cambiar, criaturas));
+    if (n) return contenedor.replaceChildren(...panelNodo(n, estado, cambiar, criaturas, items));
   }
   if (seleccion?.tipo === 'flecha' && d.flechas[seleccion.indice]) {
     return contenedor.replaceChildren(...panelFlecha(seleccion.indice, estado, cambiar));
@@ -32,7 +32,7 @@ export function pintarPanel(contenedor, estado, seleccion, { cambiar, criaturas 
   contenedor.replaceChildren(el('p', { className: 'ayuda' }, 'Selecciona un nodo o una flecha. Arrastra desde el punto de la derecha de un nodo hasta otro para conectarlos.'));
 }
 
-function panelNodo(n, estado, cambiar, criaturas) {
+function panelNodo(n, estado, cambiar, criaturas, items) {
   // Modifica el nodo `n.id` en la copia del estado.
   const editar = (fn) => cambiar((e) => fn(e.diagrama.nodos.find((x) => x.id === n.id)));
   const texto = (prop, filas = 0) => {
@@ -80,6 +80,16 @@ function panelNodo(n, estado, cambiar, criaturas) {
   }
   if (n.tipo === 'final') {
     partes.push(campo('Recompensas', texto('recompensas', 2)), campo('XP', el('input', { type: 'number', min: 0, value: n.xp ?? '', onchange: (ev) => editar((x) => { x.xp = Number(ev.target.value) || 0; }) })));
+  }
+  if (['final', 'evento', 'escena'].includes(n.tipo) && items.length) {
+    // Objetos que reciben los jugadores al llegar a este nodo (quien tenga el turno).
+    const recompensas = n.items ?? [];
+    partes.push(el('h3', {}, 'Objetos de recompensa'), ...recompensas.map((r, i) => el('div', { className: 'fila' },
+      lista(items.map((c) => [c.id, c.nombre]), r.item_id, (ev) => editar((x) => { x.items[i].item_id = ev.target.value; })),
+      el('input', { type: 'number', min: 1, max: 99, value: r.cantidad, className: 'corto', onchange: (ev) => editar((x) => { x.items[i].cantidad = Math.min(99, Math.max(1, Number(ev.target.value) || 1)); }) }),
+      el('button', { className: 'secundario', textContent: '✕', title: 'Quitar', onclick: () => editar((x) => { x.items.splice(i, 1); }) }),
+    )), el('button', { className: 'secundario', textContent: '+ Objeto', onclick: () => editar((x) => { x.items = [...(x.items ?? []), { item_id: 'pocion_curacion', cantidad: 1 }]; }) }),
+    el('p', { className: 'ayuda' }, 'Se entregan a quien tenga el turno al llegar a este nodo.'));
   }
   partes.push(el('button', {
     className: 'peligro', textContent: 'Borrar nodo',

@@ -75,6 +75,11 @@ test('la poción cura con tope en PG máximos y se gasta', async () => {
   assert.equal(j.pg_actual, j.pg_max); // 2d4+2 ≥ 4 > 1 de daño
   assert.equal(j.inventario[0].cantidad, 1);
   assert.match(JSON.stringify(gm.recibidos.at(-1)), /Poción de curación/);
+  assert.equal(gm.ultimo().evento.datos.cantidad, 1); // anuncia lo que curó de verdad
+  // Con la vida llena se puede beber igual: no cura y se gasta.
+  await brisa.enviar({ tipo: 'usar_item', instancia: instancia(gm.estado(), BRISA, 'pocion_curacion') });
+  assert.equal(gm.ultimo().evento.datos.cantidad, 0);
+  assert.equal(jugadorDe(gm.estado(), BRISA).inventario.length, 0);
 });
 
 test('habilidades: usos que se gastan y vuelven con el descanso', async () => {

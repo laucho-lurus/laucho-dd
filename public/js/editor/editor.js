@@ -10,6 +10,7 @@ const vacio = () => ({ id: null, nombre: 'Nueva campaña', resumen: '', diagrama
 let estado = vacio();
 let seleccion = null;
 let criaturas = [];
+let items = []; // catálogo de objetos para las recompensas
 let pasado = [];
 let futuro = [];
 let sinGuardar = false;
@@ -35,7 +36,7 @@ const lienzo = crearLienzo($('lienzo'), {
 
 function pintar() {
   lienzo.pintar(estado.diagrama, seleccion);
-  pintarPanel($('panel'), estado, seleccion, { cambiar, criaturas });
+  pintarPanel($('panel'), estado, seleccion, { cambiar, criaturas, items });
   pintarVariables($('variables'), estado, cambiar);
   pintarIntroduccion();
   $('nombre').value = estado.nombre;
@@ -206,5 +207,7 @@ window.addEventListener('beforeunload', (ev) => {
 listarCampanas()
   .then(() => pedir('/api/criaturas'))
   .then((r) => { criaturas = r.criaturas; })
+  .then(() => pedir('/api/catalogo'))
+  .then((r) => { items = r.items; pintar(); })
   .catch((err) => aviso(`No se pudieron cargar las campañas: ${err.message}`));
 pintar();

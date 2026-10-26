@@ -158,7 +158,7 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles, almacen: 
         });
         return true;
       }
-      if (ruta.startsWith('/api/campanas') || ruta === '/api/criaturas') return await atenderCampanas(req, res, ruta);
+      if (ruta.startsWith('/api/campanas') || ruta === '/api/criaturas' || ruta === '/api/catalogo') return await atenderCampanas(req, res, ruta);
       if (ruta.startsWith('/api/imagenes')) return await atenderImagenes(req, res, ruta);
       if (req.method === 'GET' && ruta === '/api/perfiles') {
         json(res, 200, { perfiles: await perfiles.listar(), dificultades: DIFICULTADES });

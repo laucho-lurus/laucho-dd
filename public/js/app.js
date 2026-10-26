@@ -6,6 +6,7 @@ import { agregarChat, iniciarChat } from './chat.js';
 import { crearLienzo } from './editor/lienzo.js';
 import { crearMapaTactico } from './mapa.js';
 import { autoDisponer } from './editor/tipos.js';
+import { actualizarSelectorDar, iniciarPanelObjetos, pintarInventario } from './inventario.js';
 
 const LARGO_CODIGO = 6;
 const claveToken = (codigo) => `gm-token:${codigo}`;
@@ -96,11 +97,17 @@ function mostrarPersonajes(personajes) {
   $('etiqueta-personaje').hidden = $('unirse').hidden = false;
 }
 
+let panelObjetosListo = false;
+
 function entrar(rol, nuevoEstado, historial) {
   miRol = rol;
   $('entrada').hidden = true;
   $('mesa').hidden = false;
   const esGm = rol.rol === 'gm';
+  if (esGm && !panelObjetosListo) {
+    panelObjetosListo = true;
+    void iniciarPanelObjetos((m) => servidor.enviar(m), aviso);
+  }
   $('turno').hidden = $('pedir').hidden = $('dados-libres').hidden = !esGm;
   $('texto').placeholder = rol.rol === 'gm' ? 'Narra la escena…' : '¿Qué haces?';
   actualizar(nuevoEstado);
@@ -114,10 +121,18 @@ function actualizar(nuevoEstado) {
   pintarEnemigos(estado.monstruos);
   const esGm = miRol?.rol === 'gm';
   pintarRetratos(estado, esGm ? (personaje_id, cantidad) => servidor.enviar({ tipo: 'aplicar_pg', personaje_id, cantidad }) : null);
-  if (esGm) actualizarSelectorPedir();
-  else mostrarPeticion(estado.jugadores.find((j) => j.personaje_id === miRol?.personaje_id)?.tirada_pendiente);
-  const id = estado.turno_de ?? miRol?.personaje_id;
-  pintarFicha(estado.jugadores.find((j) => j.personaje_id === id) ?? estado.jugadores[0]);
+  if (esGm) {
+    actualizarSelectorPedir();
+    actualizarSelectorDar(estado.jugadores);
+  } else mostrarPeticion(estado.jugadores.find((j) => j.personaje_id === miRol?.personaje_id)?.tirada_pendiente);
+  // El jugador ve siempre su ficha (su inventario); el GM, la de quien tiene el turno.
+  const id = esGm ? estado.turno_de : miRol?.personaje_id;
+  const jugador = estado.jugadores.find((j) => j.personaje_id === id) ?? estado.jugadores[0];
+  pintarFicha(jugador);
+  if (jugador) {
+    const propio = esGm || jugador.personaje_id === miRol?.personaje_id;
+    pintarInventario($('ficha'), jugador, { propio, esGm, enviar: (m) => servidor.enviar(m) });
+  }
 }
 
 function actualizarSelectorPedir() {
