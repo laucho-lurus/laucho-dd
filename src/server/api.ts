@@ -10,6 +10,8 @@ import { DIFICULTADES, validarPerfil, type AlmacenPerfiles } from '../ia/perfile
 import type { Almacen } from './almacen.ts';
 import { borrarImagen, imagenesDeLaCampana, MAX_IMAGEN_GM_BYTES, subirImagen } from './imagenes.ts';
 import { sanear } from '../rules/imagenes.ts';
+import { CATALOGO } from '../rules/items.ts';
+import { RASGOS } from '../rules/rasgos.ts';
 
 const MAX_CUERPO_BYTES = Math.ceil(MAX_IMAGEN_BYTES * 1.4) + 64 * 1024; // base64 + resto del formulario
 const MAX_CUERPO_GM_BYTES = Math.ceil(MAX_IMAGEN_GM_BYTES * 1.4) + 64 * 1024;
@@ -91,6 +93,11 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles, almacen: 
   /** Editor de campañas: listar, abrir, validar y guardar; criaturas para los combates. */
   async function atenderCampanas(req: IncomingMessage, res: ServerResponse, ruta: string): Promise<boolean> {
     const url = new URL(req.url ?? '/', 'http://local');
+    if (req.method === 'GET' && ruta === '/api/catalogo') {
+      // Objetos y habilidades de clase para el panel del GM y el editor.
+      json(res, 200, { items: Object.values(CATALOGO), rasgos: RASGOS });
+      return true;
+    }
     if (req.method === 'GET' && ruta === '/api/criaturas') {
       const id = url.searchParams.get('campana') ?? '';
       json(res, 200, { criaturas: unirCriaturas(id ? await repo.criaturasDeCampana(id) : []) });

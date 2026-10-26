@@ -16,7 +16,13 @@ const EXTRAS: Record<string, Record<string, unknown>> = {
   '5': { monstruos: [{ srd_clave: 'goblin', cantidad: 2 }] },
   '6': { pnj: 'Snik', sabe: 'Que Grak le teme al fuego y cuántos goblins quedan.', quiere: 'Salir vivo del molino.' },
   '8': { monstruos: [{ srd_clave: 'bugbear', cantidad: 1 }, { srd_clave: 'goblin', cantidad: 1 }] },
-  '9': { recompensas: '50 po (+25 si Mila vuelve viva), lucero del alba de Grak, poción de curación', xp: 450 },
+  '4': { items: [{ item_id: 'cuerda', cantidad: 1 }] }, // la cuerda del palomar
+  '7': { items: [{ item_id: 'pocion_curacion', cantidad: 1 }] }, // el arcón del sótano
+  '9': {
+    recompensas: '50 po (+25 si Mila vuelve viva), lucero del alba de Grak, poción de curación',
+    items: [{ item_id: 'monedas_oro', cantidad: 50 }, { item_id: 'lucero_del_alba', cantidad: 1 }, { item_id: 'pocion_curacion', cantidad: 1 }],
+    xp: 450,
+  },
 };
 
 const nodo = (id: string, tipo: string, titulo: string, texto: string, notas = '') => ({ id, tipo, titulo, texto, notas, ...EXTRAS[id] });
