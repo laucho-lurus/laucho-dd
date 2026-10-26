@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { plantillaDeCriatura, type Plantilla } from '../rules/monstruos.ts';
-import { MIGRACION_001, MIGRACION_002, type Campana, type Encuentro, type ImagenGuardada, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
+import { MIGRACION_001, MIGRACION_002, type Campana, type DatosPersonaje, type Encuentro, type ImagenGuardada, type EstadoSesion, type Evento, type NuevaImagen, type NuevoEvento, type Personaje, type Repositorio, type Sesion } from './repositorio.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODIGO_DUPLICADO = '23505'; // unique_violation
@@ -64,6 +64,11 @@ export class RepositorioPg implements Repositorio {
     } finally {
       cliente.release();
     }
+  }
+
+  async guardarDatosPersonaje(personajeId: string, datos: DatosPersonaje) {
+    if (!UUID.test(personajeId)) return;
+    await this.pool.query('update personajes set datos = $2 where id = $1', [personajeId, JSON.stringify(datos)]);
   }
 
   async guardarPg(personajeId: string, pgActual: number) {

@@ -3,6 +3,9 @@ import type { Arma, Campana, Caracteristicas, EstadoSesion, Personaje, Sesion } 
 import { buscarNodo, DIAGRAMA_VACIO, nodoInicial, type Diagrama, type Variables } from '../rules/aventura.ts';
 import type { PerfilGm } from '../ia/perfiles.ts';
 import { rellenarIntroduccion } from '../rules/introduccion.ts';
+import { bonoHabilidades, leerInventario, type Inventario } from '../rules/inventario.ts';
+import { ataqueConArma, claseArmadura } from '../rules/items.ts';
+import { modificador } from '../rules/habilidades.ts';
 import { cambiarNiebla, crearMapa, moverFicha, quitarFicha, validarMovimiento, vistaJugadores, type Mapa, type Posicion } from '../rules/mapa.ts';
 import { MAX_MONSTRUOS_VIVOS, monstruoPublico, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 
@@ -57,7 +60,10 @@ export interface EstadoJugador {
   inconsciente: boolean;
   tirada_pendiente: { notacion: string; motivo: string | null } | null;
   ca: number | null;
-  armas: Arma[];
+  armas: (Arma & { equipada?: boolean })[];
+  inventario: Inventario['inventario'];
+  habilidades: Inventario['habilidades'];
+  equipo: Inventario['equipo'];
   imagen_url: string | null;
   conectado: boolean;
 }
@@ -197,6 +203,25 @@ export class Sala {
     for (const p of nuevos) this.pg.set(p.id, p.pg_actual);
   }
 
+  /** Cambia personajes.datos en memoria (el gestor lo guarda en la base). */
+  actualizarDatos(personajeId: string, datos: Personaje['datos']) {
+    const p = this.personajes.get(personajeId);
+    if (p) this.personajes = new Map([...this.personajes, [personajeId, { ...p, datos }]]);
+  }
+
+  /** CA y armas con lo que lleva equipado (calculado en el servidor). */
+  private equipoDerivado(p: Personaje) {
+    const inv = leerInventario(p.datos);
+    const caBase = p.datos.ca ?? 10 + modificador(p.caracteristicas.des);
+    const arma = inv.inventario.find((i) => i.instancia === inv.equipo.arma);
+    const ataque = arma && ataqueConArma(p.caracteristicas, p.nivel, arma, bonoHabilidades(inv, 'ataque'));
+    return {
+      ca: claseArmadura(p.caracteristicas, caBase, inv.inventario, inv.equipo, bonoHabilidades(inv, 'ca')),
+      armas: [...(ataque ? [ataque] : []), ...(p.datos.armas ?? [])],
+      ...inv,
+    };
+  }
+
   personaje(id: string): Personaje | undefined {
     return this.personajes.get(id);
   }
@@ -316,8 +341,7 @@ export class Sala {
           pg_actual: this.pg.get(id)!,
           inconsciente: this.pg.get(id) === 0,
           tirada_pendiente: this.peticionPublica(id),
-          ca: p.datos.ca ?? null,
-          armas: p.datos.armas ?? [],
+          ...this.equipoDerivado(p),
           imagen_url: p.imagen_url ?? null,
           conectado: c !== null,
         };

@@ -15,6 +15,7 @@ const jugador = {
   personaje_id: 'pj1', nombre: 'Brisa', raza: 'Mediana', clase: 'Pícara', nivel: 1,
   caracteristicas: { fue: 8, des: 17, con: 12, int: 13, sab: 12, car: 14 }, pg_max: 9, pg_actual: 9,
   inconsciente: false, tirada_pendiente: null, ca: 14, armas: [], imagen_url: null, conectado: true,
+  inventario: [], habilidades: [], equipo: {},
 };
 const contexto = (): Contexto => ({
   perfil: PERFILES_INICIALES[1],

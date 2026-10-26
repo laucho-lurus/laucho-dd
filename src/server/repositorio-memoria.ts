@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Campana, Encuentro, ImagenGuardada, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
+import type { Campana, DatosPersonaje, Encuentro, ImagenGuardada, EstadoSesion, Evento, NuevaImagen, NuevoEvento, Personaje, Repositorio, Sesion } from './repositorio.ts';
 
 export interface DatosIniciales {
   campanas?: Campana[];
@@ -28,6 +28,10 @@ export class RepositorioMemoria implements Repositorio {
     const guardado = { ...personaje, imagen_url: imagen ? `/${imagen.ruta}` : null };
     this.personajes = [...this.personajes, guardado];
     return guardado;
+  }
+
+  async guardarDatosPersonaje(personajeId: string, datos: DatosPersonaje) {
+    this.personajes = this.personajes.map((p) => (p.id === personajeId ? { ...p, datos: structuredClone(datos) } : p));
   }
 
   async guardarPg(personajeId: string, pgActual: number) {

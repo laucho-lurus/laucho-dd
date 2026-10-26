@@ -1,4 +1,5 @@
 // Mensajes WebSocket cliente → servidor, en JSON, validados a mano.
+import type { PedidoHabilidad, PedidoItem } from '../rules/inventario.ts';
 
 export const MAX_TEXTO = 2000;
 export const MAX_NOTACION = 40;
@@ -21,6 +22,13 @@ export type MensajeCliente =
   | { tipo: 'pausar_ia'; pausada: boolean }
   | { tipo: 'deshacer_ia' }
   | { tipo: 'ver_diagrama' }
+  | { tipo: 'otorgar'; personaje_id: string; item?: PedidoItem; habilidad?: PedidoHabilidad }
+  | { tipo: 'quitar'; personaje_id: string; instancia: string; es: 'item' | 'habilidad' }
+  | { tipo: 'equipar'; personaje_id?: string; instancia: string }
+  | { tipo: 'desequipar'; personaje_id?: string; ranura: 'arma' | 'armadura' | 'escudo' }
+  | { tipo: 'usar_item'; personaje_id?: string; instancia: string }
+  | { tipo: 'usar_habilidad'; personaje_id?: string; instancia: string }
+  | { tipo: 'descanso'; descanso: 'corto' | 'largo' }
   | { tipo: 'mostrar_introduccion'; texto?: string }
   | { tipo: 'mostrar_imagen'; url: string; titulo?: string }
   | { tipo: 'mapa_configurar'; ancho: number; alto: number; velocidad: number }
@@ -174,6 +182,42 @@ export function validarMensaje(crudo: string): Validacion {
       if (esError(ancho) || esError(alto) || esError(velocidad) || !ancho || !alto) return falla('"ancho", "alto" y "velocidad" deben ser enteros');
       return bien({ tipo: 'mapa_configurar', ancho, alto, velocidad: velocidad ?? 6 });
     }
+    case 'otorgar': {
+      const personaje_id = texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      // La forma fina (catálogo, límites) la valida src/rules/inventario.ts.
+      const item = m.item as PedidoItem | undefined;
+      const habilidad = m.habilidad as PedidoHabilidad | undefined;
+      if ((item === undefined) === (habilidad === undefined) || typeof (item ?? habilidad) !== 'object' || (item ?? habilidad) === null) {
+        return falla('Indica un "item" o una "habilidad"');
+      }
+      return bien({ tipo: 'otorgar', personaje_id, ...(item ? { item } : { habilidad }) });
+    }
+    case 'quitar': {
+      const personaje_id = texto(m, 'personaje_id', MAX_ID);
+      const instancia = texto(m, 'instancia', MAX_ID);
+      if (esError(personaje_id) || esError(instancia)) return falla('Faltan "personaje_id" e "instancia"');
+      if (m.es !== 'item' && m.es !== 'habilidad') return falla('"es" debe ser item o habilidad');
+      return bien({ tipo: 'quitar', personaje_id, instancia, es: m.es });
+    }
+    case 'equipar':
+    case 'usar_item':
+    case 'usar_habilidad': {
+      const instancia = texto(m, 'instancia', MAX_ID);
+      if (esError(instancia)) return falla(instancia.error);
+      const personaje_id = m.personaje_id === undefined ? undefined : texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      return bien({ tipo: m.tipo, instancia, ...(personaje_id && { personaje_id }) });
+    }
+    case 'desequipar': {
+      if (m.ranura !== 'arma' && m.ranura !== 'armadura' && m.ranura !== 'escudo') return falla('"ranura" debe ser arma, armadura o escudo');
+      const personaje_id = m.personaje_id === undefined ? undefined : texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      return bien({ tipo: 'desequipar', ranura: m.ranura, ...(personaje_id && { personaje_id }) });
+    }
+    case 'descanso':
+      if (m.descanso !== 'corto' && m.descanso !== 'largo') return falla('"descanso" debe ser corto o largo');
+      return bien({ tipo: 'descanso', descanso: m.descanso });
     case 'mostrar_introduccion': {
       if (m.texto === undefined) return bien({ tipo: 'mostrar_introduccion' });
       const t = texto(m, 'texto', 3000);

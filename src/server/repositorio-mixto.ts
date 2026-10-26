@@ -1,4 +1,4 @@
-import type { Campana, Encuentro, EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
+import type { Campana, DatosPersonaje, Encuentro, EstadoSesion, NuevaImagen, NuevoEvento, Personaje, Repositorio } from './repositorio.ts';
 
 /**
  * Une dos repositorios: las campañas del `local` (la demo en memoria) se quedan ahí,
@@ -41,6 +41,12 @@ export class RepositorioMixto implements Repositorio {
 
   async crearPersonaje(personaje: Personaje, imagen: NuevaImagen | null) {
     return (await this.para(personaje.campana_id)).crearPersonaje(personaje, imagen);
+  }
+
+  async guardarDatosPersonaje(personajeId: string, datos: DatosPersonaje) {
+    // Como con los PG: actualizar donde no existe no hace nada.
+    await this.local.guardarDatosPersonaje(personajeId, datos);
+    await this.principal.guardarDatosPersonaje(personajeId, datos);
   }
 
   async guardarPg(personajeId: string, pgActual: number) {

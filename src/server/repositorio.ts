@@ -113,6 +113,8 @@ export interface Repositorio {
   /** Guarda el personaje (y su imagen, si tiene) y lo devuelve con imagen_url. */
   crearPersonaje(personaje: Personaje, imagen: NuevaImagen | null): Promise<Personaje>;
   guardarPg(personajeId: string, pgActual: number): Promise<void>;
+  /** Reemplaza personajes.datos (inventario, habilidades, equipo…). */
+  guardarDatosPersonaje(personajeId: string, datos: DatosPersonaje): Promise<void>;
   buscarCampana(id: string): Promise<Campana | null>;
   /** Crea (sin id) o actualiza la campaña del editor: nombre, diagrama, variables y resumen. */
   guardarCampana(id: string | null, datos: Required<Omit<Campana, 'id'>>): Promise<Campana>;
