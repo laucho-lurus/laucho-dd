@@ -4,8 +4,7 @@ import { GmIa } from './gm-ia.ts';
 import { MODELO_POR_DEFECTO, MODELOS_PERMITIDOS } from './precios.ts';
 import { Presupuesto } from './presupuesto.ts';
 
-export const ARCHIVO_GASTO = new URL('../../data/gasto-ia.json', import.meta.url).pathname;
-export const ARCHIVO_PERFILES = new URL('../../data/gm-perfiles.json', import.meta.url).pathname;
+import { rutasDatos } from '../server/rutas-datos.ts';
 const TOPE_POR_DEFECTO = 5;
 
 export function crearGmIa(env: NodeJS.ProcessEnv): { gm: GmIa | null; info: string } {
@@ -13,7 +12,7 @@ export function crearGmIa(env: NodeJS.ProcessEnv): { gm: GmIa | null; info: stri
   const pedido = env.AI_MODEL ?? MODELO_POR_DEFECTO;
   const modelo = MODELOS_PERMITIDOS.includes(pedido) ? pedido : MODELO_POR_DEFECTO;
   const tope = Number(env.AI_MONTHLY_BUDGET_USD ?? TOPE_POR_DEFECTO);
-  const presupuesto = new Presupuesto(ARCHIVO_GASTO, Number.isFinite(tope) && tope > 0 ? tope : TOPE_POR_DEFECTO);
+  const presupuesto = new Presupuesto(rutasDatos(env).gasto, Number.isFinite(tope) && tope > 0 ? tope : TOPE_POR_DEFECTO);
   const sdk = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 30_000 });
   const gm = new GmIa({ cliente: { crear: (p) => sdk.messages.create(p) }, presupuesto, modelo });
   const aviso = pedido === modelo ? '' : ` (AI_MODEL "${pedido}" no permitido; uso ${modelo})`;
