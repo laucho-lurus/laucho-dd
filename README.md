@@ -50,3 +50,15 @@ La lista de imágenes de cada aventura está en `db/seed/campanas/IMAGENES.md`; 
 
 - `/`: los jugadores se unen con el código de sala y eligen personaje (y pueden crear uno en `/personaje`).
 - `/gm`: crear sala (GM humano o IA), volver a una sala como GM con su token, y enlaces al editor, las imágenes y los perfiles. Se puede cambiar con `GM_RUTA` en `.env` (p. ej. `GM_RUTA=/mi-mesa`). Es solo discreción: la autenticación del GM sigue siendo el token de la sala.
+
+## Despliegue (Railway)
+
+Vercel no sirve: solo publica `public/` como estáticos (por eso `/gm` y `/api/*` dan 404) y sus funciones
+no mantienen WebSockets, salas en memoria ni disco. Este servidor necesita un proceso Node siempre encendido.
+
+1. En railway.com: **New Project → Deploy from GitHub repo** → `laucho-lurus/laucho-dd`. Usa el `Dockerfile` y `railway.json`.
+2. En el servicio → **Variables**: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `AI_MONTHLY_BUDGET_USD` (p. ej. 5) y, si quieres, `GM_RUTA`.
+   `PORT` y `DATA_DIR=/data` ya vienen en la imagen.
+3. En el servicio → **Volumes → New Volume**, montado en `/data` (gasto de la IA, perfiles locales e imágenes subidas).
+4. **Settings → Networking → Generate Domain**. La mesa queda en `https://<dominio>/` y el GM en `/gm`.
+5. Una sola réplica: las salas viven en la memoria del proceso.
