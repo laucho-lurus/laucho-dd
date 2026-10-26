@@ -23,9 +23,28 @@ const MAX_MENSAJE_BYTES = 16 * 1024;
 const LATIDO_MS = 30_000;
 
 /** Servidor HTTP que sirve public/index.html y acepta WebSockets en /ws. */
-export function crearServidor(gestor: Gestor, api: ReturnType<typeof crearApi>): Server {
+/** Ruta discreta del GM. No es seguridad (eso es el token del GM): solo quita la opción de la portada. */
+export const RUTA_GM_POR_DEFECTO = '/gm';
+const RUTA_GM_VALIDA = /^\/[a-z0-9-]{2,40}$/;
+
+export function rutaGm(valor: string | undefined): string {
+  return valor && RUTA_GM_VALIDA.test(valor) && !ALIAS[valor] ? valor : RUTA_GM_POR_DEFECTO;
+}
+
+export function crearServidor(gestor: Gestor, api: ReturnType<typeof crearApi>, opciones: { rutaGm?: string } = {}): Server {
+  const rutaDelGm = opciones.rutaGm ?? RUTA_GM_POR_DEFECTO;
   const http = createServer(async (req, res) => {
     const ruta = (req.url ?? '/').split('?')[0];
+    if (req.method === 'GET' && ruta === rutaDelGm) {
+      try {
+        const html = (await readFile(new URL('index.html', PUBLICO), 'utf8')).replace('<body>', '<body data-modo="gm">');
+        res.writeHead(200, { 'content-type': TIPOS.html }).end(html);
+      } catch (err) {
+        console.error('[http] no se pudo leer index.html:', err);
+        res.writeHead(500).end('Error interno');
+      }
+      return;
+    }
     const publico = req.method === 'GET' ? archivoPublico(ruta) : null;
     if (publico) {
       try {

@@ -45,3 +45,8 @@ npm run seed -- cripta --imagenes  # imágenes que pide, sin tocar la base
 ```
 
 La lista de imágenes de cada aventura está en `db/seed/campanas/IMAGENES.md`; también aparece como checklist en `/imagenes` al elegir la campaña.
+
+## Rutas
+
+- `/`: los jugadores se unen con el código de sala y eligen personaje (y pueden crear uno en `/personaje`).
+- `/gm`: crear sala (GM humano o IA), volver a una sala como GM con su token, y enlaces al editor, las imágenes y los perfiles. Se puede cambiar con `GM_RUTA` en `.env` (p. ej. `GM_RUTA=/mi-mesa`). Es solo discreción: la autenticación del GM sigue siendo el token de la sala.

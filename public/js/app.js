@@ -32,7 +32,10 @@ let estado = null;
 let miRol = null; // { rol: 'gm' } | { rol: 'jugador', personaje_id }
 
 const servidor = conectar(recibir, () => aviso('Se perdió la conexión. Recarga la página para volver.'));
-servidor.enviar({ tipo: 'ver_campanas' });
+// Modo GM: la misma página servida en la ruta del GM (/gm o GM_RUTA) con <body data-modo="gm">.
+const MODO_GM = document.body.dataset.modo === 'gm';
+$('tarjeta-gm').hidden = !MODO_GM;
+if (MODO_GM) servidor.enviar({ tipo: 'ver_campanas' });
 iniciarChat((m) => servidor.enviar(m));
 
 const nombreDe = (id) => estado?.jugadores.find((j) => j.personaje_id === id)?.nombre ?? '—';
@@ -319,6 +322,15 @@ $('codigo').addEventListener('input', () => {
 });
 $('unirse').addEventListener('click', () =>
   servidor.enviar({ tipo: 'unirse', codigo: codigoEscrito(), personaje_id: $('personaje').value }));
+const codigoGm = () => $('gm-codigo').value.replace(/\s/g, '').toUpperCase();
+$('gm-codigo').addEventListener('input', () => {
+  if (codigoGm().length === LARGO_CODIGO && !$('gm-token').value) $('gm-token').value = tokenGuardado(codigoGm()) ?? '';
+});
+$('gm-entrar').addEventListener('click', () => {
+  const token = $('gm-token').value.trim() || tokenGuardado(codigoGm());
+  if (!token) return aviso('Falta el token de GM de esa sala.');
+  servidor.enviar({ tipo: 'retomar_gm', codigo: codigoGm(), token_gm: token });
+});
 $('entrar-gm').addEventListener('click', () =>
   servidor.enviar({ tipo: 'retomar_gm', codigo: codigoEscrito(), token_gm: tokenGuardado(codigoEscrito()) }));
 $('crear').addEventListener('click', () =>

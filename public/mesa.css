@@ -235,3 +235,4 @@ input, select, textarea {
 .narracion .introduccion-fija strong { font-family: 'Cinzel', serif; font-style: normal; display: block; font-size: .8rem; color: #7a3b16; }
 .gm-introduccion textarea { width: 100%; }
 .gm-introduccion summary { cursor: pointer; color: var(--oro); font-family: 'Cinzel', serif; font-size: .85rem; }
+.enlaces-gm { display: flex; flex-wrap: wrap; gap: 12px; font-size: .85rem; }

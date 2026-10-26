@@ -27,14 +27,23 @@
       <button id="entrar-gm" class="secundario" hidden>Entrar como GM</button>
       <p id="sin-personajes" hidden>Esta campaña no tiene personajes todavía: <a class="enlace" href="/personaje">crea uno</a> y vuelve a escribir el código.</p>
     </section>
-    <section class="tarjeta">
+    <!-- Solo en la ruta del GM (/gm o GM_RUTA): la portada es solo para unirse. -->
+    <section id="tarjeta-gm" class="tarjeta" hidden>
       <h2>Dirigir una partida</h2>
       <label>Campaña <select id="campana"></select></label>
       <label>GM <select id="gm-tipo"><option value="">GM: humano</option></select></label>
       <small id="ia-info" class="ayuda-ia"></small>
       <button id="crear">Crear sala como GM</button>
-      <a class="enlace" href="/perfiles">Editar perfiles de GM IA</a>
-      <a class="enlace" href="/imagenes">Imágenes de la campaña</a>
+      <h2>Volver a una sala como GM</h2>
+      <label>Código de sala <input id="gm-codigo" maxlength="6" autocomplete="off" placeholder="K7MQ2X"></label>
+      <label>Token de GM <input id="gm-token" autocomplete="off" placeholder="Se rellena solo si creaste la sala en este navegador"></label>
+      <button id="gm-entrar" class="secundario">Entrar como GM</button>
+      <nav class="enlaces-gm">
+        <a class="enlace" href="/editor">Editor de campañas</a>
+        <a class="enlace" href="/imagenes">Imágenes</a>
+        <a class="enlace" href="/perfiles">Perfiles de GM IA</a>
+        <a class="enlace" href="/prueba">Página de pruebas</a>
+      </nav>
     </section>
   </div>
   <p id="aviso-entrada" class="aviso"></p>
