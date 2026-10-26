@@ -9,6 +9,7 @@ import type { Evento } from '../server/repositorio.ts';
 import { costo, MODELO_POR_DEFECTO } from './precios.ts';
 import type { EstadoGasto, Presupuesto } from './presupuesto.ts';
 import type { PerfilGm } from './perfiles.ts';
+import { limiteIa, REGALABLES_IA } from '../rules/items.ts';
 
 export const MAX_TOKENS = 500;
 export const MAX_VUELTAS = 3;
@@ -48,6 +49,7 @@ export interface Acciones {
   avanzarNodo(nodoId: string): Promise<string>;
   fijarVariable(nombre: string, valor: boolean | number | string): Promise<string>;
   aplicarPg(personajeId: string, cantidad: number, motivo: string): Promise<string>;
+  otorgarItem(personajeId: string, itemId: string, cantidad: number, motivo: string): Promise<string>;
 }
 
 export type Aviso = (nivel: EstadoGasto['nivel'], estado: EstadoGasto) => void;
@@ -59,6 +61,7 @@ Reglas que siempre cumples:
 - Nunca inventas resultados de dados ni daño. Si una acción tiene un resultado incierto, pide una tirada con "pedir_tirada" y espera su resultado; no la resuelves tú.
 - Monstruos: sácalos con "agregar_monstruos". Para que un personaje los ataque, usa "pedir_tirada" con objetivo_monstruo y efecto "ataque" (el servidor usa su CA y te dirá si acierta); si acierta, pide el daño con efecto "daño" y el servidor restará sus PG y te dirá si cae. Nunca inventes ni cambies los PG de un monstruo.
 - Daño y curación a personajes: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
+- Objetos: solo con "otorgar_item", como recompensa clara de la ficción (un cofre, un pago, un botín). Un objeto por intervención; nada de objetos mágicos poderosos ni oro desmedido.
 - Solo avanzas a las salidas listadas del nodo actual ("avanzar_nodo") y solo cambias variables que ya existen ("fijar_variable").
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
 - Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.
@@ -109,6 +112,20 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
         motivo: { type: 'string', description: 'p. ej. "mordisco del lobo"' },
       },
       required: ['personaje', 'cantidad', 'motivo'],
+    },
+  },
+  {
+    name: 'otorgar_item',
+    description: `Da un objeto del catálogo a un personaje (1 por intervención). Máx.: 50 monedas de oro, 2 pociones, 1 de lo demás.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        personaje: { type: 'string', description: 'personaje_id' },
+        item_id: { type: 'string', enum: REGALABLES_IA },
+        cantidad: { type: 'integer', minimum: 1, maximum: 50 },
+        motivo: { type: 'string', description: 'p. ej. "botín del cofre del molinero"' },
+      },
+      required: ['personaje', 'item_id', 'motivo'],
     },
   },
   {
@@ -204,6 +221,7 @@ interface Cuenta {
   pg: number;
   narraciones: number;
   motivos_fallidos: number;
+  items: number;
 }
 
 async function ejecutar(
@@ -259,6 +277,17 @@ async function ejecutar(
       if (typeof e.motivo !== 'string' || !e.motivo.trim()) return falla('Falta el motivo');
       cuenta.pg += 1;
       return { texto: await acciones.aplicarPg(e.personaje as string, n, e.motivo.trim()), error: false };
+    }
+    case 'otorgar_item': {
+      if (cuenta.items >= 1) return falla('Ya diste un objeto en esta intervención');
+      if (!c.jugadores.some((j) => j.personaje_id === e.personaje)) return falla('Ese personaje no está en la mesa; usa un id de la lista');
+      const tope = typeof e.item_id === 'string' ? limiteIa(e.item_id) : 0;
+      if (!tope) return falla('Ese objeto no existe o no puedes darlo; el GM humano decide los objetos poderosos');
+      const n = e.cantidad ?? 1;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > tope) return falla(`La cantidad de ese objeto va de 1 a ${tope}`);
+      if (typeof e.motivo !== 'string' || !e.motivo.trim()) return falla('Falta el motivo');
+      cuenta.items += 1;
+      return { texto: await acciones.otorgarItem(e.personaje as string, e.item_id as string, n, e.motivo.trim()), error: false };
     }
     case 'avanzar_nodo': {
       const validas = salidas(c.campana.diagrama, c.nodo_actual).map((f) => f.hasta);
@@ -325,7 +354,7 @@ Entre 3 y 5 frases, en español: un lugar concreto, el encargo que reciben los h
    */
   async turno(contexto: () => Promise<Contexto>, disparador: string, acciones: Acciones, avisar: Aviso): Promise<void> {
     let c = await contexto();
-    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0 };
+    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0, items: 0 };
     const herramientas = c.permitir_pg ? HERRAMIENTAS : HERRAMIENTAS.filter((h) => h.name !== 'aplicar_pg');
     const sistema: Anthropic.TextBlockParam[] = [{ type: 'text', text: promptSistema(c.perfil), cache_control: { type: 'ephemeral' } }];
     const mensajes: Anthropic.MessageParam[] = [{ role: 'user', content: promptContexto(c, disparador) }];

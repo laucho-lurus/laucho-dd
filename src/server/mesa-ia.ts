@@ -25,7 +25,9 @@ export interface Puertos {
   agregarMonstruos(sala: Sala, autor: string, srdClave: string, cantidad: number, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; nuevos: Monstruo[] }>;
   criaturas(sala: Sala): Promise<{ srd_clave: string; nombre: string }[]>;
   /** Pasa a otro nodo: efectos de la flecha, monstruos del combate y anuncio. `estricto`: respeta condiciones. */
-  avanzarNodo(sala: Sala, autor: string, nodoId: string, extra: Record<string, unknown>, estricto: boolean): Promise<{ eventos: (Evento | { id: null })[]; monstruos: string[]; resumen: string }>;
+  avanzarNodo(sala: Sala, autor: string, nodoId: string, extra: Record<string, unknown>, estricto: boolean): Promise<{ eventos: (Evento | { id: null })[]; monstruos: string[]; items: IntervencionIa['items']; resumen: string }>;
+  /** Da un objeto del catálogo y lo anuncia. Devuelve la instancia para poder deshacerlo. */
+  otorgarItem(sala: Sala, autor: string, personajeId: string, pedido: { item_id: string; cantidad: number }, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; instancia: string; cantidad: number }>;
   registro(mensaje: string, err?: unknown): void;
   guardarEstado(sala: Sala): Promise<void>;
   /** Aplica PG y publica el evento. Devuelve el cambio real (tras recortar a 0 y al máximo). */
@@ -174,6 +176,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     const ids: number[] = [];
     const cambiosPg: IntervencionIa['pg'] = [];
     const agregados: string[] = [];
+    const items: IntervencionIa['items'] = [];
     const anotar = (e: Evento | { id: null }) => {
       if (e.id !== null) ids.push(e.id);
     };
@@ -210,6 +213,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
               const r = await this.puertos.avanzarNodo(sala, AUTOR_IA, nodoId, { personaje_nombre: firma, ia: true }, true);
               r.eventos.forEach(anotar);
               agregados.push(...r.monstruos);
+              items.push(...r.items);
               return r.resumen;
             } catch (err) {
               return (err as Error).message;
@@ -232,6 +236,16 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
             if (r.delta !== 0) cambiosPg.push({ personaje_id: personajeId, delta: r.delta });
             return `PG cambiados en ${r.delta} (${sala.pgDe(personajeId)} actuales)`;
           }),
+          otorgarItem: (personajeId, itemId, cantidad, motivo) => sala.encolar(async () => {
+            try {
+              const r = await this.puertos.otorgarItem(sala, AUTOR_IA, personajeId, { item_id: itemId, cantidad }, { motivo, ia: true, firma });
+              anotar(r.evento);
+              items.push({ personaje_id: personajeId, instancia: r.instancia, cantidad: r.cantidad });
+              return 'Objeto entregado y anunciado';
+            } catch (err) {
+              return `No se pudo dar: ${(err as Error).message}`;
+            }
+          }),
           fijarVariable: (nombre, valor) => sala.encolar(async () => {
             const r = sala.fijarVariable(nombre, valor);
             if (!r.ok) return r.error;
@@ -250,7 +264,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
       sala.enviarGm({ tipo: 'error', mensaje: `La IA falló: ${(err as Error).message}`.slice(0, 300) });
     } finally {
       if (sala.ia) {
-        const hecho = unirIntervenciones(sala.ia.arrastre, { eventos: ids, pg: cambiosPg, agregados });
+        const hecho = unirIntervenciones(sala.ia.arrastre, { eventos: ids, pg: cambiosPg, agregados, items });
         sala.ia = { ...sala.ia, arrastre: SIN_INTERVENCION, ...(!intervencionVacia(hecho) && { ultima: hecho }) };
       }
     }

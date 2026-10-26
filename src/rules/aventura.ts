@@ -21,6 +21,7 @@ export interface Nodo {
   quiere?: string;
   disparador?: { variable: string; valor: boolean | number | string }; // evento
   recompensas?: string; // final
+  items?: { item_id: string; cantidad: number }[]; // final, evento, escena: se entregan al llegar
   xp?: number;
 }
 

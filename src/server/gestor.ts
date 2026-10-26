@@ -64,7 +64,8 @@ export class Gestor {
           avanzarNodo: (sala, autor, id, extra, estricto) => this.avanzarNodo(sala, autor, id, extra, estricto),
           criaturas: async (sala) => (await this.plantillas(sala)).map(({ srd_clave, nombre }) => ({ srd_clave, nombre })),
           guardarEstado: (sala) => this.guardarEstado(sala),
-          aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
+          otorgarItem: (sala, autor, id, pedido, extra) => this.otorgarItem(sala, autor, id, pedido, extra),
+      aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
         }, ia.tiempo_maximo_ms)
       : null;
   }
@@ -302,10 +303,14 @@ export class Gestor {
         for (const { id, delta } of [...ultima.monstruos].reverse()) sala.pgMonstruo(id, -delta);
         for (const id of ultima.agregados) sala.quitarMonstruo(id);
         if (ultima.monstruos.length || ultima.agregados.length) await this.guardarMonstruos(sala);
+        for (const { personaje_id, instancia, cantidad } of ultima.items) {
+          // Si ya lo gastó o lo tiró, no hay nada que quitar.
+          await this.cambiarInventario(sala, personaje_id, (inv) => quitarItem(inv, instancia, cantidad)).catch(() => {});
+        }
         return this.publicar(sala, 'estado', autor, {
           cambio: 'deshacer_ia',
           eventos: ultima.eventos,
-          texto: `El GM deshizo la última intervención de la IA${ultima.pg.length ? ' (PG restaurados)' : ''}.`,
+          texto: `El GM deshizo la última intervención de la IA${ultima.pg.length ? ' (PG restaurados)' : ''}${ultima.items.length ? ' (objetos retirados)' : ''}.`,
         });
       }
       case 'agregar_monstruos':
@@ -468,9 +473,22 @@ export class Gestor {
         }
       }
     }
+    // Recompensas del nodo: a quien tiene el turno (o al primero de la mesa).
+    const items: { personaje_id: string; instancia: string; cantidad: number }[] = [];
+    const quien = sala.turnoDe() ?? sala.estado().jugadores[0]?.personaje_id;
+    for (const r of quien ? destino.items ?? [] : []) {
+      try {
+        const o = await this.otorgarItem(sala, autor, quien!, r, extra);
+        eventos.push(o.evento);
+        items.push({ personaje_id: quien!, instancia: o.instancia, cantidad: o.cantidad });
+      } catch (err) {
+        sala.enviarGm({ tipo: 'error', mensaje: `No se pudo entregar la recompensa: ${(err as Error).message}` });
+      }
+    }
     const efectos = flecha?.efectos?.length ? ` Variables: ${flecha.efectos.map((e) => `${e.variable} = ${e.valor}`).join(', ')}.` : '';
     const entran = monstruos.length ? ` Entran ${monstruos.length} monstruos (ids ${monstruos.join(', ')}).` : '';
-    return { eventos, monstruos, resumen: `Ahora en el nodo ${nodoId}.${efectos}${entran}` };
+    const reciben = items.length ? ` Recompensas entregadas: ${destino.items!.map((r) => `${r.cantidad} × ${r.item_id}`).join(', ')}.` : '';
+    return { eventos, monstruos, items, resumen: `Ahora en el nodo ${nodoId}.${efectos}${entran}${reciben}` };
   }
 
   /** Criaturas de la campaña (tabla criaturas) más el SRD local para las que falten. */

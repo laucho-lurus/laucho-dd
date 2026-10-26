@@ -58,6 +58,7 @@ function accionesFalsas() {
     avanzarNodo: async (n) => (hechas.push(`nodo:${n}`), 'ok'),
     fijarVariable: async (n, v) => (hechas.push(`var:${n}=${v}`), 'ok'),
     aplicarPg: async (p, n, m) => (hechas.push(`pg:${p}:${n}:${m}`), 'ok'),
+    otorgarItem: async (p, i, n, m) => (hechas.push(`item:${p}:${i}:${n}:${m}`), 'ok'),
   };
   return { acciones, hechas };
 }
@@ -184,6 +185,24 @@ test('aplicar_pg: aplica, respeta 25 por llamada y 2 por intervención', async (
   assert.deepEqual(r.map((x) => Boolean(x.is_error)), [true, true, false, false, true]);
   assert.match(String(r[4].content), /2 veces/);
   assert.match(promptSistema(PERFILES_INICIALES[0]), /solo tras una tirada ya resuelta/);
+});
+
+test('otorgar_item: 1 por intervención, sin objetos fuertes ni oro desmedido', async () => {
+  const { cliente, peticiones } = clienteFalso([
+    respuesta([
+      herramienta('otorgar_item', { personaje: 'pj1', item_id: 'pocion_curacion_suprema', motivo: 'cofre' }, 'a'),
+      herramienta('otorgar_item', { personaje: 'pj1', item_id: 'monedas_oro', cantidad: 500, motivo: 'cofre' }, 'b'),
+      herramienta('otorgar_item', { personaje: 'pj1', item_id: 'espada_larga', cantidad: 2, motivo: 'cofre' }, 'c'),
+      herramienta('otorgar_item', { personaje: 'pj1', item_id: 'monedas_oro', cantidad: 30, motivo: 'paga del molinero' }, 'd'),
+      herramienta('otorgar_item', { personaje: 'pj1', item_id: 'antorcha', motivo: 'otra' }, 'e'),
+    ]),
+    respuesta([], 'end_turn'),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => contexto(), 'x', acciones, () => {});
+  assert.deepEqual(hechas, ['item:pj1:monedas_oro:30:paga del molinero']);
+  const r = peticiones[1].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
+  assert.deepEqual(r.map((x) => Boolean(x.is_error)), [true, true, true, false, true]);
 });
 
 test('con la casilla apagada la herramienta no se ofrece y se rechaza', async () => {

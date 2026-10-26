@@ -1,5 +1,6 @@
 // Editor de campañas: normalización de lo que manda el cliente, validación y reglas de conexión.
 import { TIPOS_NODO, type Diagrama, type Flecha, type Nodo, type Variables } from './aventura.ts';
+import { CATALOGO } from './items.ts';
 
 const MAX_NODOS = 300;
 const MAX_TEXTO = 4000;
@@ -66,6 +67,13 @@ function nodo(v: unknown): Nodo | null {
     n.monstruos = o.monstruos
       .filter((m): m is { srd_clave: string; cantidad: number } => typeof m?.srd_clave === 'string' && Number.isInteger(m?.cantidad))
       .map((m) => ({ srd_clave: m.srd_clave, cantidad: Math.min(6, Math.max(1, m.cantidad)) }));
+  }
+  if (Array.isArray(o.items) && ['final', 'evento', 'escena'].includes(tipo)) {
+    const items = o.items
+      .filter((x): x is { item_id: string; cantidad: number } => typeof x?.item_id === 'string' && Object.hasOwn(CATALOGO, x.item_id) && Number.isInteger(x?.cantidad))
+      .slice(0, 10)
+      .map((x) => ({ item_id: x.item_id, cantidad: Math.min(99, Math.max(1, x.cantidad)) }));
+    if (items.length) n.items = items;
   }
   if (Array.isArray(o.opciones)) n.opciones = o.opciones.filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 200));
   for (const campo of ['pnj', 'sabe', 'quiere', 'recompensas'] as const) if (typeof o[campo] === 'string') n[campo] = texto(o[campo]);

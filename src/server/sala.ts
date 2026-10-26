@@ -23,18 +23,20 @@ export interface IntervencionIa {
   pg: { personaje_id: string; delta: number }[]; // cambios reales de PG (ya recortados a 0 y al máximo)
   monstruos: { id: string; delta: number }[]; // daño a monstruos de tiradas que pidió la IA
   agregados: string[]; // monstruos que sacó la IA
+  items: { personaje_id: string; instancia: string; cantidad: number }[]; // objetos que dio la IA (o su nodo)
 }
 
-export const SIN_INTERVENCION: IntervencionIa = { eventos: [], pg: [], monstruos: [], agregados: [] };
+export const SIN_INTERVENCION: IntervencionIa = { eventos: [], pg: [], monstruos: [], agregados: [], items: [] };
 
 export const unirIntervenciones = (a: IntervencionIa, b: Partial<IntervencionIa>): IntervencionIa => ({
   eventos: [...a.eventos, ...(b.eventos ?? [])],
   pg: [...a.pg, ...(b.pg ?? [])],
   monstruos: [...a.monstruos, ...(b.monstruos ?? [])],
   agregados: [...a.agregados, ...(b.agregados ?? [])],
+  items: [...a.items, ...(b.items ?? [])],
 });
 
-export const intervencionVacia = (i: IntervencionIa) => i.eventos.length + i.pg.length + i.monstruos.length + i.agregados.length === 0;
+export const intervencionVacia = (i: IntervencionIa) => i.eventos.length + i.pg.length + i.monstruos.length + i.agregados.length + i.items.length === 0;
 
 export const MAX_JUGADORES = 6;
 

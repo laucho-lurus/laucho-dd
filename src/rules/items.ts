@@ -95,6 +95,16 @@ const LISTA: ItemCatalogo[] = [
 
 export const CATALOGO: Readonly<Record<string, ItemCatalogo>> = Object.fromEntries(LISTA.map((i) => [i.id, i]));
 
+/** Cuánto puede regalar la IA de un objeto en una llamada (0: nada). Sin mágicos fuertes ni oro desmedido. */
+export function limiteIa(itemId: string): number {
+  const c = CATALOGO[itemId];
+  if (!c || c.restringido) return 0;
+  if (c.id === 'monedas_oro') return 50;
+  return c.tipo === 'pocion' ? 2 : 1;
+}
+
+export const REGALABLES_IA = LISTA.filter((i) => limiteIa(i.id) > 0).map((i) => i.id);
+
 /** Un objeto en el inventario de un personaje. `item_id` del catálogo o "custom". */
 export interface ItemInventario {
   instancia: string; // id único dentro del inventario

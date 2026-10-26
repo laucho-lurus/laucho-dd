@@ -584,3 +584,35 @@ test('introducción: si la campaña no tiene, la IA la escribe una vez y se guar
   await g2.conectar({ enviar: () => {} }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: 'x' }));
   assert.equal(llamadas.length, 1);
 });
+
+test('objetos: la IA da uno acotado y "Deshacer IA" lo retira', async () => {
+  const { gestor, humano, jugador, codigo } = await mesa([
+    respuesta([usar('otorgar_item', { personaje: BRISA, item_id: 'pocion_curacion', cantidad: 2, motivo: 'cofre del sótano' })]),
+    respuesta([usar('narrar', { texto: 'Dos frascos rojos.' })], 'end_turn'),
+  ]);
+  await humano.enviar({ tipo: 'narrar_escena' });
+  await gestor.esperarIa(codigo);
+  assert.equal(eventos(jugador).find((e) => e.datos.cambio === 'inventario').datos.texto, 'Brisa recibe 2 × Poción de curación.');
+  assert.equal(jugador.ultimo().estado.jugadores[0].inventario[0].cantidad, 2);
+  await humano.enviar({ tipo: 'deshacer_ia' });
+  assert.deepEqual(jugador.ultimo().estado.jugadores[0].inventario, []);
+  assert.match(eventos(humano).at(-1).datos.texto, /objetos retirados/);
+});
+
+test('recompensas del nodo: se entregan al llegar y se anuncian', async () => {
+  const demo = DATOS_DEMO.campanas![0];
+  const campana = {
+    ...demo,
+    diagrama: { ...demo.diagrama!, nodos: demo.diagrama!.nodos.map((n) => (n.id === '3' ? { ...n, items: [{ item_id: 'monedas_oro', cantidad: 30 }, { item_id: 'pocion_curacion', cantidad: 1 }] } : n)) },
+  };
+  const gestor = new Gestor(new RepositorioMemoria({ ...DATOS_DEMO, campanas: [campana] }), () => {});
+  const recibidos: Msj[] = [];
+  const gm = gestor.conectar({ enviar: (m) => recibidos.push(m as Msj) });
+  await gm.recibir(JSON.stringify({ tipo: 'crear_sesion', campana_id: CAMPANA_DEMO_ID }));
+  const codigo = recibidos.find((m) => m.tipo === 'sesion_creada')!.codigo;
+  await gestor.conectar({ enviar: () => {} }).recibir(JSON.stringify({ tipo: 'unirse', codigo, personaje_id: BRISA }));
+  await gm.recibir(JSON.stringify({ tipo: 'cambiar_nodo', nodo_id: '3' }));
+  const textos = eventos({ recibidos }).filter((e) => e.datos.cambio === 'inventario').map((e) => e.datos.texto);
+  assert.deepEqual(textos, ['Brisa recibe 30 × Monedas de oro.', 'Brisa recibe Poción de curación.']);
+  assert.equal(recibidos.at(-1)!.estado.jugadores[0].inventario.length, 2);
+});
