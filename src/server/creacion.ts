@@ -6,6 +6,7 @@ import {
   type Metodo,
 } from '../rules/personaje.ts';
 import type { Caracteristicas, Personaje, Repositorio } from './repositorio.ts';
+import { validarEleccion } from '../rules/hechizos.ts';
 
 export const MAX_IMAGEN_BYTES = 2 * 1024 * 1024;
 const TIRADAS_VIGENCIA_MS = 30 * 60_000;
@@ -128,6 +129,8 @@ export async function crearPersonaje(deps: Dependencias, cuerpo: unknown): Promi
   if (imagen && !imagen.ok) return imagen;
 
   const caracteristicas = aplicarBonos(base, raza);
+  const hechizos = validarEleccion(clase.nombre, caracteristicas, e.hechizos);
+  if (!hechizos.ok) return hechizos;
   const d = derivados(caracteristicas, clase);
   const personaje: Personaje = {
     id: randomUUID(),
@@ -148,6 +151,8 @@ export async function crearPersonaje(deps: Dependencias, cuerpo: unknown): Promi
       alineamiento: e.alineamiento,
       metodo,
       caracteristicas_base: base,
+      hechizos: hechizos.valor,
+      xp: 0,
     },
   };
 

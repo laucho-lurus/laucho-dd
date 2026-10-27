@@ -53,9 +53,12 @@ export interface Acciones {
   aplicarPg(personajeId: string, cantidad: number, motivo: string): Promise<string>;
   otorgarItem(personajeId: string, itemId: string, cantidad: number, motivo: string): Promise<string>;
   pasarTurno(): Promise<string>;
+  otorgarXp(personajeId: string | null, cantidad: number, motivo: string): Promise<string>;
 }
 
 export type Aviso = (nivel: EstadoGasto['nivel'], estado: EstadoGasto) => void;
+
+export const MAX_XP_IA = 100;
 
 const REGLAS = `Eres el Game Master de una partida de Dungeons & Dragons 5e (SRD 5.1) que se juega por chat.
 Reglas que siempre cumples:
@@ -66,7 +69,8 @@ Reglas que siempre cumples:
 - Daño y curación a personajes: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
 - Objetos: solo con "otorgar_item", como recompensa clara de la ficción (un cofre, un pago, un botín). Un objeto por intervención; nada de objetos mágicos poderosos ni oro desmedido.
 - Turnos: cuando la acción del jugador que tiene el turno queda resuelta (sin tiradas pendientes), llama a "pasar_turno" y di quién sigue. Si te escribe alguien sin turno, recuérdale amablemente de quién es el turno.
-- Cada personaje solo puede usar lo que figura en su ficha (armas, objetos, habilidades). Si alguien intenta lanzar un hechizo, usar un objeto o una habilidad que no tiene, niégalo dentro de la ficción ("buscas en tu mochila, pero no hay ninguna poción") y no lo resuelvas.
+- Los hechizos los lanza el jugador con el botón de su ficha: el servidor valida que lo conozca, descuenta el maná (PM), tira y te manda el resultado para que lo narres. Si un jugador dice que lanza un hechizo por chat, pídele que use el botón; si no lo tiene en su lista, niégalo.
+- Cada personaje solo puede usar lo que figura en su ficha (armas, objetos, habilidades, hechizos). Si alguien intenta lanzar un hechizo, usar un objeto o una habilidad que no tiene, niégalo dentro de la ficción ("buscas en tu mochila, pero no hay ninguna poción") y no lo resuelvas.
 - Solo avanzas a las salidas listadas del nodo actual ("avanzar_nodo") y solo cambias variables que ya existen ("fijar_variable").
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
 - Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.
@@ -117,6 +121,19 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
         motivo: { type: 'string', description: 'p. ej. "mordisco del lobo"' },
       },
       required: ['personaje', 'cantidad', 'motivo'],
+    },
+  },
+  {
+    name: 'otorgar_xp',
+    description: `Da experiencia por algo que no sea matar monstruos (eso lo reparte el servidor al terminar el combate): resolver un enigma, negociar, cumplir una misión. 1 por intervención, máx. ${MAX_XP_IA} por personaje.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        personaje: { type: 'string', description: 'personaje_id; omítelo para dárselo a todos' },
+        cantidad: { type: 'integer', minimum: 1, maximum: MAX_XP_IA },
+        motivo: { type: 'string' },
+      },
+      required: ['cantidad', 'motivo'],
     },
   },
   {
@@ -198,9 +215,10 @@ export function promptContexto(c: Contexto, disparador: string): string {
     const car = Object.entries(j.caracteristicas).map(([k, v]) => `${k.toUpperCase()} ${v}`).join(', ');
     const armas = j.armas.map((a) => `${a.nombre} ${a.ataque} ${a.dano}`).join('; ') || '—';
     const objetos = j.inventario.map((i) => `${i.nombre}${i.cantidad > 1 ? ` ×${i.cantidad}` : ''}`).join(', ') || 'nada';
+    const hechizos = j.hechizos.map((h) => `${h.nombre} (${h.costo} PM)`).join(', ') || 'ninguno';
     const habilidades = j.habilidades.map((h) => `${h.nombre}${h.uso === 'a_voluntad' ? '' : ` (${h.usos_restantes}/${h.usos_max})`}`).join(', ') || 'ninguna';
     return `- ${j.nombre} (id ${j.personaje_id}): ${j.raza} ${j.clase} ${j.nivel}, PG ${j.pg_actual}/${j.pg_max}${j.inconsciente ? ' INCONSCIENTE' : ''}, CA ${j.ca ?? '?'}, ${car}
-  Armas: ${armas}. Objetos: ${objetos}. Habilidades: ${habilidades}. Hechizos: ninguno.`;
+  Armas: ${armas}. Objetos: ${objetos}. Habilidades: ${habilidades}. Hechizos: ${hechizos}.${j.pm_max ? ` PM ${j.pm}/${j.pm_max}.` : ''} XP ${j.xp}.`;
   });
   return `Campaña: ${c.campana.nombre}. ${c.campana.resumen}
 ${c.introduccion ? `\nIntroducción (ya leída a los jugadores; no la repitas ni la contradigas): ${c.introduccion}\n` : ''}
@@ -238,6 +256,7 @@ interface Cuenta {
   motivos_fallidos: number;
   items: number;
   turnos: number;
+  xp: number;
 }
 
 async function ejecutar(
@@ -295,6 +314,15 @@ async function ejecutar(
       if (typeof e.motivo !== 'string' || !e.motivo.trim()) return falla('Falta el motivo');
       cuenta.pg += 1;
       return { texto: await acciones.aplicarPg(e.personaje as string, n, e.motivo.trim()), error: false };
+    }
+    case 'otorgar_xp': {
+      if (cuenta.xp >= 1) return falla('Ya diste experiencia en esta intervención');
+      const n = e.cantidad;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_XP_IA) return falla(`La cantidad va de 1 a ${MAX_XP_IA}`);
+      if (e.personaje !== undefined && !c.jugadores.some((j) => j.personaje_id === e.personaje)) return falla('Ese personaje no está en la mesa; usa un id de la lista');
+      if (typeof e.motivo !== 'string' || !e.motivo.trim()) return falla('Falta el motivo');
+      cuenta.xp += 1;
+      return { texto: await acciones.otorgarXp((e.personaje as string | undefined) ?? null, n, e.motivo.trim()), error: false };
     }
     case 'pasar_turno':
       if (cuenta.turnos >= 1) return falla('Ya pasaste el turno en esta intervención');
@@ -376,7 +404,7 @@ Entre 3 y 5 frases, en español: un lugar concreto, el encargo que reciben los h
    */
   async turno(contexto: () => Promise<Contexto>, disparador: string, acciones: Acciones, avisar: Aviso): Promise<void> {
     let c = await contexto();
-    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0, items: 0, turnos: 0 };
+    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0, items: 0, turnos: 0, xp: 0 };
     const herramientas = c.permitir_pg ? HERRAMIENTAS : HERRAMIENTAS.filter((h) => h.name !== 'aplicar_pg');
     const sistema: Anthropic.TextBlockParam[] = [{ type: 'text', text: promptSistema(c.perfil), cache_control: { type: 'ephemeral' } }];
     const mensajes: Anthropic.MessageParam[] = [{ role: 'user', content: promptContexto(c, disparador) }];

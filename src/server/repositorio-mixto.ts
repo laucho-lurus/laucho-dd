@@ -49,6 +49,11 @@ export class RepositorioMixto implements Repositorio {
     await this.principal.guardarDatosPersonaje(personajeId, datos);
   }
 
+  async guardarNivel(personajeId: string, nivel: number, pgMax: number) {
+    await this.local.guardarNivel(personajeId, nivel, pgMax);
+    await this.principal.guardarNivel(personajeId, nivel, pgMax);
+  }
+
   async guardarPg(personajeId: string, pgActual: number) {
     // Los ids no se repiten entre repositorios: actualizar donde no existe no hace nada.
     await this.local.guardarPg(personajeId, pgActual);

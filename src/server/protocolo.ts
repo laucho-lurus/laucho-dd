@@ -5,6 +5,7 @@ export const MAX_TEXTO = 2000;
 export const MAX_NOTACION = 40;
 export const MAX_CHAT = 300;
 const MAX_ID = 64;
+const MAX_XP_CAMBIO = 100_000;
 
 export type MensajeCliente =
   | { tipo: 'ver_campanas' }
@@ -28,7 +29,10 @@ export type MensajeCliente =
   | { tipo: 'desequipar'; personaje_id?: string; ranura: 'arma' | 'armadura' | 'escudo' }
   | { tipo: 'usar_item'; personaje_id?: string; instancia: string }
   | { tipo: 'usar_habilidad'; personaje_id?: string; instancia: string }
-  | { tipo: 'descanso'; descanso: 'corto' | 'largo' }
+  | { tipo: 'descanso'; descanso: 'corto' | 'largo'; pm_corto?: boolean }
+  | { tipo: 'lanzar'; hechizo_id: string; objetivo_monstruo?: string; objetivo_personaje?: string }
+  | { tipo: 'dar_xp'; personaje_id?: string; cantidad: number }
+  | { tipo: 'ajustar_pm'; personaje_id: string; cantidad: number }
   | { tipo: 'mostrar_introduccion'; texto?: string }
   | { tipo: 'mostrar_imagen'; url: string; titulo?: string }
   | { tipo: 'mapa_configurar'; ancho: number; alto: number; velocidad: number }
@@ -217,7 +221,30 @@ export function validarMensaje(crudo: string): Validacion {
     }
     case 'descanso':
       if (m.descanso !== 'corto' && m.descanso !== 'largo') return falla('"descanso" debe ser corto o largo');
-      return bien({ tipo: 'descanso', descanso: m.descanso });
+      if (m.pm_corto !== undefined && typeof m.pm_corto !== 'boolean') return falla('"pm_corto" debe ser verdadero o falso');
+      return bien({ tipo: 'descanso', descanso: m.descanso, ...(m.pm_corto !== undefined && { pm_corto: m.pm_corto }) });
+    case 'lanzar': {
+      const hechizo_id = texto(m, 'hechizo_id', MAX_ID);
+      if (esError(hechizo_id)) return falla(hechizo_id.error);
+      const opcional = (campo: string) => (m[campo] === undefined || m[campo] === null || m[campo] === '' ? undefined : texto(m, campo, MAX_ID));
+      const objetivo_monstruo = opcional('objetivo_monstruo');
+      const objetivo_personaje = opcional('objetivo_personaje');
+      if (esError(objetivo_monstruo) || esError(objetivo_personaje)) return falla('Objetivo inválido');
+      return bien({ tipo: 'lanzar', hechizo_id, ...(objetivo_monstruo && { objetivo_monstruo }), ...(objetivo_personaje && { objetivo_personaje }) });
+    }
+    case 'dar_xp':
+    case 'ajustar_pm': {
+      const cantidad = entero(m, 'cantidad', -MAX_XP_CAMBIO, MAX_XP_CAMBIO);
+      if (esError(cantidad)) return falla(cantidad.error);
+      if (!cantidad) return falla('"cantidad" debe ser un entero distinto de 0');
+      const personaje_id = m.personaje_id === undefined || m.personaje_id === '' ? undefined : texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      if (m.tipo === 'ajustar_pm') {
+        if (!personaje_id) return falla('Falta "personaje_id"');
+        return bien({ tipo: 'ajustar_pm', personaje_id, cantidad });
+      }
+      return bien({ tipo: 'dar_xp', cantidad, ...(personaje_id && { personaje_id }) });
+    }
     case 'mostrar_introduccion': {
       if (m.texto === undefined) return bien({ tipo: 'mostrar_introduccion' });
       const t = texto(m, 'texto', 3000);

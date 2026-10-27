@@ -71,6 +71,11 @@ export class RepositorioPg implements Repositorio {
     await this.pool.query('update personajes set datos = $2 where id = $1', [personajeId, JSON.stringify(datos)]);
   }
 
+  async guardarNivel(personajeId: string, nivel: number, pgMax: number) {
+    if (!UUID.test(personajeId)) return;
+    await this.pool.query('update personajes set nivel = $2, pg_max = $3 where id = $1', [personajeId, nivel, pgMax]);
+  }
+
   async guardarPg(personajeId: string, pgActual: number) {
     await this.pool.query('update personajes set pg_actual = $2 where id = $1', [personajeId, pgActual]);
   }

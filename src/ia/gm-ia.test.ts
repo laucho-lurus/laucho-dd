@@ -16,6 +16,7 @@ const jugador = {
   caracteristicas: { fue: 8, des: 17, con: 12, int: 13, sab: 12, car: 14 }, pg_max: 9, pg_actual: 9,
   inconsciente: false, tirada_pendiente: null, ca: 14, armas: [], imagen_url: null, conectado: true,
   inventario: [], habilidades: [], equipo: {},
+  hechizos: [], pm: 0, pm_max: 0, xp: 0, xp_siguiente: 300,
 };
 const contexto = (): Contexto => ({
   perfil: PERFILES_INICIALES[1],
@@ -62,6 +63,7 @@ function accionesFalsas() {
     aplicarPg: async (p, n, m) => (hechas.push(`pg:${p}:${n}:${m}`), 'ok'),
     otorgarItem: async (p, i, n, m) => (hechas.push(`item:${p}:${i}:${n}:${m}`), 'ok'),
     pasarTurno: async () => (hechas.push('turno'), 'ok'),
+    otorgarXp: async (p, n, m) => (hechas.push(`xp:${p}:${n}:${m}`), 'ok'),
   };
   return { acciones, hechas };
 }
@@ -261,7 +263,7 @@ test('el contexto lista armas, objetos, habilidades y el turno; la regla pide ne
     habilidades: [{ instancia: 'h1', rasgo_id: 'ataque_furtivo', nombre: 'Ataque furtivo', descripcion: '', uso: 'a_voluntad' as const, usos_max: 0, usos_restantes: 0 }],
   };
   const p = promptContexto({ ...contexto(), jugadores: [ficha], turno_de: 'pj1', ronda: 3 }, 'x');
-  assert.match(p, /Armas: Estoque \+5 1d8\+3 perforante\. Objetos: Poción de curación ×2\. Habilidades: Ataque furtivo\. Hechizos: ninguno\./);
+  assert.match(p, /Armas: Estoque \+5 1d8\+3 perforante\. Objetos: Poción de curación ×2\. Habilidades: Ataque furtivo\. Hechizos: ninguno\. XP 0\./);
   assert.match(p, /Turno de Brisa \(ronda 3\)/);
   assert.match(promptSistema(PERFILES_INICIALES[0]), /niégalo dentro de la ficción/);
 });

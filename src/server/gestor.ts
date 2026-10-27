@@ -9,6 +9,8 @@ import {
 } from '../rules/inventario.ts';
 import { generarCodigo } from './codigo.ts';
 import { rasgosDeClase } from '../rules/rasgos.ts';
+import { Progreso } from './progreso.ts';
+import type { DatosPersonaje, Personaje } from './repositorio.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
@@ -51,10 +53,22 @@ export class Gestor {
   private readonly ia: MesaIa | null;
   private readonly ultimoChat = new WeakMap<Cliente, number>();
   private readonly criaturas = new Map<string, Promise<Plantilla[]>>(); // por campaña
+  private readonly progreso: Progreso;
+  private readonly puertosProgreso = (): ConstructorParameters<typeof Progreso>[0] => ({
+    repo: this.repo,
+    publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
+    cambiarDatos: (sala, id, fn) => this.cambiarDatos(sala, id, fn),
+    aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
+    danarMonstruo: (sala, id, cantidad, deIa) => this.danarMonstruo(sala, id, cantidad, deIa),
+    guardarPg: (id, pg) => this.guardarPg(id, pg),
+    registro: (mensaje, err) => this.registro(mensaje, err),
+    error: (mensaje) => new ErrorDeJuego(mensaje),
+  });
 
   constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? ''), ia?: OpcionesIa) {
     this.repo = repo;
     this.registro = registro;
+    this.progreso = new Progreso(this.puertosProgreso());
     this.ia = ia
       ? new MesaIa(ia.gm, ia.perfiles, {
           repo,
@@ -66,6 +80,7 @@ export class Gestor {
           criaturas: async (sala) => (await this.plantillas(sala)).map(({ srd_clave, nombre }) => ({ srd_clave, nombre })),
           guardarEstado: (sala) => this.guardarEstado(sala),
           pasarTurno: (sala, autor, extra) => this.pasarTurno(sala, autor, extra),
+          otorgarXp: (sala, autor, id, cantidad, extra) => this.progreso.darXp(sala, autor, id, cantidad, extra),
       otorgarItem: (sala, autor, id, pedido, extra) => this.otorgarItem(sala, autor, id, pedido, extra),
       aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
         }, ia.tiempo_maximo_ms)
@@ -416,11 +431,30 @@ export class Gestor {
       }
       case 'descanso': {
         soloGm(quien);
+        const pm: string[] = [];
         for (const j of sala.estado().jugadores) {
           await this.cambiarInventario(sala, j.personaje_id, (inv) => ({ ok: true, valor: { inv: descanso(inv, m.descanso) } }));
+          const r = await this.progreso.descansar(sala, j.personaje_id, m.descanso, m.pm_corto ?? true);
+          if (r) pm.push(r);
         }
-        return void (await this.anunciar(sala, autor, `El grupo hace un descanso ${m.descanso}: se recuperan las habilidades.`));
+        const mana = pm.length ? ` Maná: ${pm.join(', ')}.` : '';
+        return void (await this.anunciar(sala, autor, `El grupo hace un descanso ${m.descanso}: se recuperan las habilidades.${mana}`));
       }
+      case 'lanzar': {
+        if (quien.rol !== 'jugador') throw new ErrorDeJuego('Los hechizos los lanzan los jugadores desde su ficha');
+        if (this.ia?.responderia(sala)) sala.ia_pensando = true;
+        const texto = await this.progreso.lanzar(sala, autor, quien.personaje_id, m);
+        return this.ia?.disparar(sala, `${nombre} (jugador) ${texto.slice(nombre.length + 1)}`, quien.personaje_id);
+      }
+      case 'dar_xp': {
+        soloGm(quien);
+        const ids = m.personaje_id ? [m.personaje_id] : sala.estado().jugadores.map((j) => j.personaje_id);
+        for (const id of ids) await this.progreso.darXp(sala, autor, id, m.cantidad);
+        return;
+      }
+      case 'ajustar_pm':
+        soloGm(quien);
+        return this.progreso.ajustarPm(sala, autor, m.personaje_id, m.cantidad);
       case 'mostrar_introduccion':
         soloGm(quien);
         if (m.texto !== undefined) {
@@ -533,6 +567,7 @@ export class Gestor {
     const caidos = sala.retirarCaidos();
     await this.guardarMonstruos(sala);
     await this.publicar(sala, 'estado', 'sistema', { cambio: 'fin_combate', texto: `¡Combate terminado! Cayeron: ${caidos.map((m) => m.nombre).join(', ')}.` });
+    await this.progreso.xpDeCombate(sala, caidos.map((m) => m.srd_clave));
   }
 
   /** Resta PG a un monstruo, lo anuncia y, si la tirada la pidió la IA, lo apunta para deshacer. */
@@ -572,21 +607,31 @@ export class Gestor {
    * Aplica un cambio al inventario de un personaje de la sala, lo guarda (personajes.datos) y lo difunde.
    * `fn` devuelve el inventario nuevo y lo que haga falta anunciar.
    */
-  private async cambiarInventario<T extends { inv: Inventario }>(
-    sala: Sala, personajeId: string, fn: (inv: Inventario) => { ok: true; valor: T } | { ok: false; error: string },
+  /** Aplica un cambio a personajes.datos de un personaje de la sala, lo guarda y lo deja en memoria. */
+  private async cambiarDatos<T extends { datos: DatosPersonaje }>(
+    sala: Sala, personajeId: string, fn: (datos: DatosPersonaje, pj: Personaje) => { ok: true; valor: T } | { ok: false; error: string },
   ): Promise<{ nombre: string; extra: T }> {
     const pj = sala.personaje(personajeId);
     if (!pj || !sala.estado().jugadores.some((j) => j.personaje_id === personajeId)) throw new ErrorDeJuego('Ese personaje no está en la sala');
-    const r = fn(leerInventario(pj.datos));
+    const r = fn(pj.datos, pj);
     if (!r.ok) throw new ErrorDeJuego(r.error);
-    const datos = conInventario(pj.datos, r.valor.inv);
-    sala.actualizarDatos(personajeId, datos);
+    sala.actualizarDatos(personajeId, r.valor.datos);
     try {
-      await this.repo.guardarDatosPersonaje(personajeId, datos);
+      await this.repo.guardarDatosPersonaje(personajeId, r.valor.datos);
     } catch (err) {
-      this.registro('[sala] no se pudo guardar el inventario:', err); // la memoria manda
+      this.registro('[sala] no se pudo guardar la ficha:', err); // la memoria manda
     }
     return { nombre: pj.nombre, extra: r.valor };
+  }
+
+  /** Igual que cambiarDatos, pero sobre el inventario (`fn` devuelve el inventario nuevo y lo que haga falta anunciar). */
+  private cambiarInventario<T extends { inv: Inventario }>(
+    sala: Sala, personajeId: string, fn: (inv: Inventario) => { ok: true; valor: T } | { ok: false; error: string },
+  ): Promise<{ nombre: string; extra: T & { datos: DatosPersonaje } }> {
+    return this.cambiarDatos(sala, personajeId, (datos) => {
+      const r = fn(leerInventario(datos));
+      return r.ok ? { ok: true, valor: { ...r.valor, datos: conInventario(datos, r.valor.inv) } } : r;
+    });
   }
 
   /** "Torvald recibe Espada larga": anuncio en la mesa (y estado nuevo para todos). */

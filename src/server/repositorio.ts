@@ -115,6 +115,8 @@ export interface Repositorio {
   guardarPg(personajeId: string, pgActual: number): Promise<void>;
   /** Reemplaza personajes.datos (inventario, habilidades, equipo…). */
   guardarDatosPersonaje(personajeId: string, datos: DatosPersonaje): Promise<void>;
+  /** Subida de nivel: columnas nivel y pg_max. */
+  guardarNivel(personajeId: string, nivel: number, pgMax: number): Promise<void>;
   buscarCampana(id: string): Promise<Campana | null>;
   /** Crea (sin id) o actualiza la campaña del editor: nombre, diagrama, variables y resumen. */
   guardarCampana(id: string | null, datos: Required<Omit<Campana, 'id'>>): Promise<Campana>;

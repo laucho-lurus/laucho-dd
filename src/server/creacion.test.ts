@@ -115,3 +115,17 @@ test('un personaje creado con la sala abierta aparece al unirse, y los PG se gua
   const enRepo = (await repo.personajesDeCampana(CAMPANA_DEMO_ID)).find((p) => p.id === r.valor.id)!;
   assert.equal(enRepo.pg_actual, 8);
 });
+
+test('hechizos en la creación: el brujo elige 2 trucos y 2 de nivel 1 de su lista; el guerrero, ninguno', async () => {
+  const { deps } = preparar();
+  const brujo = { ...base, clase: 'brujo' };
+  const mal = await crearPersonaje(deps, { ...brujo, hechizos: ['descarga_sobrenatural', 'curar_heridas'] });
+  assert.ok(!mal.ok && /no es un hechizo de tu clase/.test(mal.error));
+  const faltan = await crearPersonaje(deps, brujo);
+  assert.ok(!faltan.ok && /2 trucos y 2 hechizos de nivel 1/.test(faltan.error));
+  const ok = await crearPersonaje(deps, { ...brujo, hechizos: ['descarga_sobrenatural', 'toque_helado', 'brazos_de_hadar', 'represion_infernal'] });
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.valor.datos.hechizos, ['descarga_sobrenatural', 'toque_helado', 'brazos_de_hadar', 'represion_infernal']);
+  const guerrero = await crearPersonaje(deps, { ...base, hechizos: ['luz'] });
+  assert.ok(!guerrero.ok);
+});

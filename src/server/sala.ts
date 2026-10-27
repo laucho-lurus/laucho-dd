@@ -6,6 +6,9 @@ import { rellenarIntroduccion } from '../rules/introduccion.ts';
 import { bonoHabilidades, leerInventario, type Inventario } from '../rules/inventario.ts';
 import { ataqueConArma, claseArmadura } from '../rules/items.ts';
 import { modificador } from '../rules/habilidades.ts';
+import { HECHIZOS } from '../rules/hechizos.ts';
+import { costoPm, leerMagia, pmActual, pmMax } from '../rules/magia.ts';
+import { xpSiguiente } from '../rules/experiencia.ts';
 import { cambiarNiebla, crearMapa, moverFicha, quitarFicha, validarMovimiento, vistaJugadores, type Mapa, type Posicion } from '../rules/mapa.ts';
 import { MAX_MONSTRUOS_VIVOS, monstruoPublico, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 
@@ -66,6 +69,11 @@ export interface EstadoJugador {
   inventario: Inventario['inventario'];
   habilidades: Inventario['habilidades'];
   equipo: Inventario['equipo'];
+  hechizos: { id: string; nombre: string; nivel: number; costo: number; alcance: string; descripcion: string; efecto: string }[];
+  pm: number;
+  pm_max: number;
+  xp: number;
+  xp_siguiente: number | null;
   imagen_url: string | null;
   conectado: boolean;
 }
@@ -224,6 +232,30 @@ export class Sala {
     };
   }
 
+  /** Hechizos conocidos, PM y XP para la ficha. */
+  private magiaDerivada(p: Personaje) {
+    const m = leerMagia(p.datos);
+    const max = pmMax(p.clase, p.nivel, p.caracteristicas);
+    return {
+      hechizos: m.hechizos.map((id) => {
+        const h = HECHIZOS[id];
+        return { id, nombre: h.nombre, nivel: h.nivel, costo: costoPm(h), alcance: h.alcance, descripcion: h.descripcion, efecto: h.efecto.tipo };
+      }),
+      pm: pmActual(m, max),
+      pm_max: max,
+      xp: typeof p.datos.xp === 'number' ? p.datos.xp : 0,
+      xp_siguiente: xpSiguiente(p.nivel),
+    };
+  }
+
+  /** Subida de nivel: cambia nivel y PG máximos, y suma a los actuales lo ganado. */
+  subirNivel(personajeId: string, nivel: number, pgExtra: number) {
+    const p = this.personajes.get(personajeId);
+    if (!p) return;
+    this.personajes = new Map([...this.personajes, [personajeId, { ...p, nivel, pg_max: p.pg_max + pgExtra }]]);
+    this.pg.set(personajeId, (this.pg.get(personajeId) ?? 0) + pgExtra);
+  }
+
   personaje(id: string): Personaje | undefined {
     return this.personajes.get(id);
   }
@@ -352,6 +384,7 @@ export class Sala {
           inconsciente: this.pg.get(id) === 0,
           tirada_pendiente: this.peticionPublica(id),
           ...this.equipoDerivado(p),
+          ...this.magiaDerivada(p),
           imagen_url: p.imagen_url ?? null,
           conectado: c !== null,
         };

@@ -29,6 +29,8 @@ export interface Puertos {
   /** Da un objeto del catálogo y lo anuncia. Devuelve la instancia para poder deshacerlo. */
   /** Pasa el turno (salta inconscientes) y lo anuncia a la mesa. */
   pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>): Promise<Evento | { id: null }>;
+  /** Da XP (y sube de nivel si toca) con anuncio. */
+  otorgarXp(sala: Sala, autor: string, personajeId: string, cantidad: number, extra: Record<string, unknown>): Promise<void>;
   otorgarItem(sala: Sala, autor: string, personajeId: string, pedido: { item_id: string; cantidad: number }, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; instancia: string; cantidad: number }>;
   registro(mensaje: string, err?: unknown): void;
   guardarEstado(sala: Sala): Promise<void>;
@@ -247,6 +249,15 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
               anotar(await this.puertos.pasarTurno(sala, AUTOR_IA, { ia: true, firma }));
               paso = true;
               return `Turno de ${sala.personaje(sala.turnoDe() ?? '')?.nombre ?? 'nadie'}`;
+            } catch (err) {
+              return (err as Error).message;
+            }
+          }),
+          otorgarXp: (personajeId, cantidad, motivo) => sala.encolar(async () => {
+            const ids = personajeId ? [personajeId] : sala.estado().jugadores.map((j) => j.personaje_id);
+            try {
+              for (const id of ids) await this.puertos.otorgarXp(sala, AUTOR_IA, id, cantidad, { motivo, ia: true, firma });
+              return `XP entregada a ${ids.length} personaje(s)`;
             } catch (err) {
               return (err as Error).message;
             }

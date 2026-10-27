@@ -12,6 +12,8 @@ import { borrarImagen, imagenesDeLaCampana, MAX_IMAGEN_GM_BYTES, subirImagen } f
 import { sanear } from '../rules/imagenes.ts';
 import { CATALOGO } from '../rules/items.ts';
 import { RASGOS } from '../rules/rasgos.ts';
+import { HECHIZOS, LANZADORES } from '../rules/hechizos.ts';
+import { COSTO_PM } from '../rules/magia.ts';
 
 const MAX_CUERPO_BYTES = Math.ceil(MAX_IMAGEN_BYTES * 1.4) + 64 * 1024; // base64 + resto del formulario
 const MAX_CUERPO_GM_BYTES = Math.ceil(MAX_IMAGEN_GM_BYTES * 1.4) + 64 * 1024;
@@ -95,7 +97,7 @@ export function crearApi(repo: Repositorio, perfiles: AlmacenPerfiles, almacen: 
     const url = new URL(req.url ?? '/', 'http://local');
     if (req.method === 'GET' && ruta === '/api/catalogo') {
       // Objetos y habilidades de clase para el panel del GM y el editor.
-      json(res, 200, { items: Object.values(CATALOGO), rasgos: RASGOS });
+      json(res, 200, { items: Object.values(CATALOGO), rasgos: RASGOS, hechizos: Object.values(HECHIZOS), lanzadores: LANZADORES, costo_pm: COSTO_PM });
       return true;
     }
     if (req.method === 'GET' && ruta === '/api/criaturas') {

@@ -34,6 +34,10 @@ export class RepositorioMemoria implements Repositorio {
     this.personajes = this.personajes.map((p) => (p.id === personajeId ? { ...p, datos: structuredClone(datos) } : p));
   }
 
+  async guardarNivel(personajeId: string, nivel: number, pgMax: number) {
+    this.personajes = this.personajes.map((p) => (p.id === personajeId ? { ...p, nivel, pg_max: pgMax } : p));
+  }
+
   async guardarPg(personajeId: string, pgActual: number) {
     this.personajes = this.personajes.map((p) => (p.id === personajeId ? { ...p, pg_actual: pgActual } : p));
   }
