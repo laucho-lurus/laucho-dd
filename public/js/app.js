@@ -7,6 +7,7 @@ import { crearLienzo } from './editor/lienzo.js';
 import { crearMapaTactico } from './mapa.js';
 import { autoDisponer } from './editor/tipos.js';
 import { actualizarSelectorDar, iniciarPanelObjetos, pintarInventario } from './inventario.js';
+import { pintarMagia } from './magia.js';
 
 const LARGO_CODIGO = 6;
 const claveToken = (codigo) => `gm-token:${codigo}`;
@@ -132,6 +133,8 @@ function actualizar(nuevoEstado) {
   if (jugador) {
     const propio = esGm || jugador.personaje_id === miRol?.personaje_id;
     pintarInventario($('ficha'), jugador, { propio, esGm, enviar: (m) => servidor.enviar(m) });
+    // Lanzar es cosa del jugador: el GM ve los hechizos pero no los lanza.
+    pintarMagia($('ficha'), jugador, { propio: !esGm && propio, monstruos: estado.monstruos, jugadores: estado.jugadores, enviar: (m) => servidor.enviar(m) });
   }
 }
 

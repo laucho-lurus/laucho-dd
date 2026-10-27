@@ -1,4 +1,5 @@
 // Formulario de creación de personaje. El servidor vuelve a validar todo.
+import { cargarHechizos, hechizosElegidos, pintarHechizos } from './hechizos-creacion.js';
 
 const $ = (id) => document.getElementById(id);
 const CARS = [['fue', 'Fuerza'], ['des', 'Destreza'], ['con', 'Constitución'], ['int', 'Inteligencia'], ['sab', 'Sabiduría'], ['car', 'Carisma']];
@@ -25,6 +26,7 @@ async function iniciar() {
   try {
     const r = await fetch('/api/opciones');
     opciones = await r.json();
+    await cargarHechizos();
   } catch {
     return aviso('No se pudieron cargar las opciones. ¿Está corriendo el servidor?');
   }
@@ -102,6 +104,7 @@ function actualizar() {
   }
   $('pg').textContent = clase && total.con !== null ? Math.max(1, clase.dado_golpe + mod(total.con)) : '—';
   $('ca').textContent = total.des !== null ? 10 + mod(total.des) : '—';
+  if (clase) pintarHechizos(clase.nombre, total);
   if ($('metodo').value === 'compra') {
     const gasto = Object.values(base).reduce((s, v) => s + (COSTE[v] ?? 99), 0);
     $('puntos').textContent = `Puntos: ${27 - gasto} de 27`;
@@ -166,6 +169,7 @@ async function crear() {
         caracteristicas,
         token_tiradas: tokenTiradas ?? undefined,
         imagen: foto ?? undefined,
+        hechizos: hechizosElegidos(),
       }),
     });
     const datos = await r.json();

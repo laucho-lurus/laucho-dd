@@ -140,7 +140,13 @@
         <summary>Objetos y habilidades</summary>
         <div class="fila"><label>Para <select id="dar-a"></select></label>
           <button id="descanso-corto" class="secundario">Descanso corto</button>
-          <button id="descanso-largo" class="secundario">Descanso largo</button></div>
+          <button id="descanso-largo" class="secundario">Descanso largo</button>
+          <label class="casilla"><input id="pm-corto" type="checkbox" checked> El descanso corto recupera la mitad de PM</label></div>
+        <div class="fila"><input id="dar-xp-cantidad" type="number" min="-100000" max="100000" value="50" aria-label="XP">
+          <button id="dar-xp" class="secundario">Dar XP</button>
+          <button id="dar-xp-todos" class="secundario">XP a todos</button>
+          <input id="ajustar-pm-cantidad" type="number" min="-50" max="50" value="2" aria-label="PM (negativo para quitar)">
+          <button id="ajustar-pm" class="secundario">Sumar PM</button></div>
         <div class="fila"><select id="dar-item" aria-label="Objeto del catálogo"></select>
           <input id="dar-item-cantidad" type="number" min="1" max="99" value="1" aria-label="Cantidad">
           <button id="dar-item-boton" class="secundario">Dar objeto</button></div>

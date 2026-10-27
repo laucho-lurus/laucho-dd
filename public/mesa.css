@@ -251,3 +251,11 @@ button.mini { padding: 2px 8px; font-size: .8rem; }
 button.mini.quitar { background: transparent; color: var(--tenue); border: 1px solid var(--borde); }
 #gm-objetos input:not([type=number]) { flex: 1; min-width: 120px; }
 #gm-objetos input[type=number] { width: 4.5em; }
+
+/* Barras de maná y experiencia */
+.barra { position: relative; height: 18px; background: var(--madera-c, rgba(0,0,0,.25)); border: 1px solid var(--borde); border-radius: 4px; margin-bottom: 6px; overflow: hidden; }
+.barra span { position: absolute; inset: 0 auto 0 0; }
+.barra.pm span { background: #3b6fb6; }
+.barra.xp span { background: #8a6d2c; }
+.barra small { position: relative; display: block; text-align: center; font-size: .75rem; line-height: 18px; color: #fff; }
+select.mini { padding: 2px 4px; font-size: .8rem; max-width: 120px; }

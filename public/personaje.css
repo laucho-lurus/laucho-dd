@@ -20,3 +20,11 @@
 .acciones { justify-content: center; }
 .acciones a { color: var(--oro); }
 .exito-creacion { color: var(--vida); }
+
+/* Elección de hechizos */
+.hechizos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.hechizo { display: flex; gap: 8px; align-items: flex-start; padding: 8px; border: 1px solid var(--borde); border-radius: 6px; cursor: pointer; }
+.hechizo input { margin-top: 4px; }
+.hechizo small { color: var(--tenue); }
+.hechizo .desc { font-size: .8rem; }
+.ayuda { color: var(--tenue); font-size: .9rem; }

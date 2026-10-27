@@ -148,7 +148,11 @@ export async function iniciarPanelObjetos(enviar, avisar) {
     $('dar-mov-nombre').value = '';
     $('dar-mov-desc').value = '';
   });
-  $('descanso-corto').addEventListener('click', () => enviar({ tipo: 'descanso', descanso: 'corto' }));
+  $('descanso-corto').addEventListener('click', () => enviar({ tipo: 'descanso', descanso: 'corto', pm_corto: $('pm-corto').checked }));
+  const numero = (id) => Number($(id).value) || 0;
+  $('dar-xp').addEventListener('click', () => enviar({ tipo: 'dar_xp', personaje_id: para(), cantidad: numero('dar-xp-cantidad') }));
+  $('dar-xp-todos').addEventListener('click', () => enviar({ tipo: 'dar_xp', cantidad: numero('dar-xp-cantidad') }));
+  $('ajustar-pm').addEventListener('click', () => enviar({ tipo: 'ajustar_pm', personaje_id: para(), cantidad: numero('ajustar-pm-cantidad') }));
   $('descanso-largo').addEventListener('click', () => enviar({ tipo: 'descanso', descanso: 'largo' }));
 }
 
