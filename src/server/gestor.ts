@@ -3,18 +3,16 @@ import { roll } from '../rules/dice.ts';
 import { tiradaDeChequeo } from '../rules/habilidades.ts';
 import { buscarNodo, evaluarCondicion, flechaEntre } from '../rules/aventura.ts';
 import { motivoPorDefecto, textoPeticion, textoTirada } from '../rules/tiradas.ts';
-import {
-  beberPocion, conInventario, descanso, desequipar, equipar, leerInventario, otorgarHabilidad, otorgarItem, quitarHabilidad, quitarItem,
-  usarHabilidad, type Inventario, type PedidoItem,
-} from '../rules/inventario.ts';
+import { otorgarHabilidad, quitarItem } from '../rules/inventario.ts';
 import { generarCodigo } from './codigo.ts';
 import { rasgosDeClase } from '../rules/rasgos.ts';
 import { Progreso } from './progreso.ts';
+import { InventarioSala } from './inventario-sala.ts';
 import { Combate, type ResumenTurnos } from './combate.ts';
 import { danoACaido, MUERTE_INICIAL, type Tirar } from '../rules/combate.ts';
 import type { DatosPersonaje, Personaje } from './repositorio.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
-import type { Repositorio, TipoEvento } from './repositorio.ts';
+import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
 import { MesaIa } from './mesa-ia.ts';
 import { hashToken, intervencionVacia } from './sala.ts';
@@ -63,6 +61,7 @@ export class Gestor {
   private readonly criaturas = new Map<string, Promise<Plantilla[]>>(); // por campaña
   private readonly progreso: Progreso;
   private readonly combate: Combate;
+  private readonly inventario: InventarioSala;
   private readonly tirador: Tirar;
   private readonly puertosProgreso = (): ConstructorParameters<typeof Progreso>[0] => ({
     repo: this.repo,
@@ -81,6 +80,13 @@ export class Gestor {
     this.registro = registro;
     this.tirador = azar.tirar ?? roll;
     this.progreso = new Progreso(this.puertosProgreso());
+    this.inventario = new InventarioSala({
+      publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
+      cambiarDatos: (sala, id, fn) => this.cambiarDatos(sala, id, fn),
+      aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
+      descansarPm: (sala, id, tipo, corto) => this.progreso.descansar(sala, id, tipo, corto),
+      dado: (n) => this.dado(n),
+    });
     this.combate = new Combate({
       publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
       guardarPg: (id, pg) => this.guardarPg(id, pg),
@@ -101,7 +107,7 @@ export class Gestor {
           guardarEstado: (sala) => this.guardarEstado(sala),
           pasarTurno: (sala, autor, extra) => this.pasarTurno(sala, autor, extra),
           otorgarXp: (sala, autor, id, cantidad, extra) => this.progreso.darXp(sala, autor, id, cantidad, extra),
-      otorgarItem: (sala, autor, id, pedido, extra) => this.otorgarItem(sala, autor, id, pedido, extra),
+      otorgarItem: (sala, autor, id, pedido, extra) => this.inventario.otorgarItem(sala, autor, id, pedido, extra),
       aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
         }, ia.tiempo_maximo_ms)
       : null;
@@ -253,7 +259,7 @@ export class Gestor {
     const nombre = pj.nombre;
     // Primera vez en una mesa: recibe las habilidades de su clase (luego quedan guardadas en su ficha).
     if (pj.datos.habilidades === undefined) {
-      await this.cambiarInventario(sala, personajeId, (inv) => {
+      await this.inventario.cambiarInventario(sala, personajeId, (inv) => {
         let actual = inv;
         for (const r of rasgosDeClase(pj.clase)) {
           const h = otorgarHabilidad(actual, { rasgo_id: r.id }, () => randomUUID());
@@ -355,7 +361,7 @@ export class Gestor {
         if (ultima.monstruos.length || ultima.agregados.length) await this.guardarMonstruos(sala);
         for (const { personaje_id, instancia, cantidad } of ultima.items) {
           // Si ya lo gastó o lo tiró, no hay nada que quitar.
-          await this.cambiarInventario(sala, personaje_id, (inv) => quitarItem(inv, instancia, cantidad)).catch(() => {});
+          await this.inventario.cambiarInventario(sala, personaje_id, (inv) => quitarItem(inv, instancia, cantidad)).catch(() => {});
         }
         return this.publicar(sala, 'estado', autor, {
           cambio: 'deshacer_ia',
@@ -407,60 +413,24 @@ export class Gestor {
         if (!r.ok) throw new ErrorDeJuego(r.error);
         return this.cambioDeMapa(sala);
       }
-      case 'otorgar': {
+      case 'otorgar':
         soloGm(quien);
-        if (m.item) return void (await this.otorgarItem(sala, autor, m.personaje_id, m.item, {}));
-        const r = await this.cambiarInventario(sala, m.personaje_id, (inv) => otorgarHabilidad(inv, m.habilidad!, () => randomUUID()));
-        return void (await this.anunciar(sala, autor, `${r.nombre} aprende ${r.extra.habilidad.nombre}.`));
-      }
-      case 'quitar': {
+        if (m.item) return void (await this.inventario.otorgarItem(sala, autor, m.personaje_id, m.item, {}));
+        return this.inventario.otorgarHabilidad(sala, autor, m.personaje_id, m.habilidad!);
+      case 'quitar':
         soloGm(quien);
-        const r = await this.cambiarInventario(sala, m.personaje_id, (inv) => {
-          const q = m.es === 'item' ? quitarItem(inv, m.instancia) : quitarHabilidad(inv, m.instancia);
-          return q.ok ? { ok: true, valor: { inv: q.valor.inv, nombre: 'item' in q.valor ? q.valor.item.nombre : q.valor.habilidad.nombre } } : q;
-        });
-        return void (await this.anunciar(sala, autor, `${r.nombre} pierde ${r.extra.nombre}.`));
-      }
+        return this.inventario.quitar(sala, autor, m.personaje_id, m.instancia, m.es);
       case 'equipar':
-      case 'desequipar': {
-        const id = this.personajeDe(quien, m.personaje_id);
-        const pj = sala.personaje(id)!;
-        await this.cambiarInventario(sala, id, (inv) => {
-          if (m.tipo === 'desequipar') return { ok: true, valor: { inv: desequipar(inv, m.ranura) } };
-          const e = equipar(inv, m.instancia, pj.caracteristicas);
-          return e.ok ? { ok: true, valor: { inv: e.valor } } : e;
-        });
-        return sala.difundir({ tipo: 'estado', estado: sala.estado() });
-      }
-      case 'usar_item': {
-        const id = this.personajeDe(quien, m.personaje_id);
-        const r = await this.cambiarInventario(sala, id, (inv) => beberPocion(inv, m.instancia));
-        const curacion = this.dado(r.extra.curacion);
-        // Mismo camino que el daño y la curación del GM: tope en los PG máximos y anuncio.
-        // Se anuncia lo que cura de verdad (tope en PG máx.); la tirada va en el motivo.
-        const falta = sala.personaje(id)!.pg_max - (sala.pgDe(id) ?? 0);
-        const motivo = `${r.extra.nombre}: ${curacion.notation} = ${curacion.total} [${curacion.kept.join(', ')}]`;
-        await this.aplicarPg(sala, autor, id, Math.min(curacion.total, falta), { motivo });
-        return;
-      }
-      case 'usar_habilidad': {
-        const id = this.personajeDe(quien, m.personaje_id);
-        const r = await this.cambiarInventario(sala, id, (inv) => usarHabilidad(inv, m.instancia));
-        const h = r.extra.habilidad;
-        const usos = h.uso === 'a_voluntad' ? '' : ` (le quedan ${h.usos_restantes} de ${h.usos_max})`;
-        return void (await this.anunciar(sala, autor, `${r.nombre} usa ${h.nombre}${usos}: ${h.descripcion}`));
-      }
-      case 'descanso': {
+        return this.inventario.equipar(sala, this.personajeDe(quien, m.personaje_id), m.instancia, null);
+      case 'desequipar':
+        return this.inventario.equipar(sala, this.personajeDe(quien, m.personaje_id), null, m.ranura);
+      case 'usar_item':
+        return this.inventario.usarItem(sala, autor, this.personajeDe(quien, m.personaje_id), m.instancia);
+      case 'usar_habilidad':
+        return this.inventario.usarHabilidad(sala, autor, this.personajeDe(quien, m.personaje_id), m.instancia);
+      case 'descanso':
         soloGm(quien);
-        const pm: string[] = [];
-        for (const j of sala.estado().jugadores) {
-          await this.cambiarInventario(sala, j.personaje_id, (inv) => ({ ok: true, valor: { inv: descanso(inv, m.descanso) } }));
-          const r = await this.progreso.descansar(sala, j.personaje_id, m.descanso, m.pm_corto ?? true);
-          if (r) pm.push(r);
-        }
-        const mana = pm.length ? ` Maná: ${pm.join(', ')}.` : '';
-        return void (await this.anunciar(sala, autor, `El grupo hace un descanso ${m.descanso}: se recuperan las habilidades.${mana}`));
-      }
+        return this.inventario.descanso(sala, autor, m.descanso, m.pm_corto ?? true);
       case 'lanzar': {
         if (quien.rol !== 'jugador') throw new ErrorDeJuego('Los hechizos los lanzan los jugadores desde su ficha');
         if (this.ia?.responderia(sala)) sala.ia_pensando = true;
@@ -548,7 +518,7 @@ export class Gestor {
     for (const e of flecha?.efectos ?? []) sala.fijarVariable(e.variable, e.valor);
     sala.cambiarNodo(nodoId);
     await this.guardarEstado(sala);
-    const eventos = [await this.publicar(sala, 'estado', autor, { ...extra, cambio: 'nodo', nodo_id: nodoId, titulo: destino.titulo })];
+    const eventos: (Evento | { id: null })[] = [await this.publicar(sala, 'estado', autor, { ...extra, cambio: 'nodo', nodo_id: nodoId, titulo: destino.titulo })];
     const monstruos: string[] = [];
     if (destino.tipo === 'combate') {
       for (const m of destino.monstruos ?? []) {
@@ -563,10 +533,11 @@ export class Gestor {
     }
     // Recompensas del nodo: a quien tiene el turno (o al primero de la mesa).
     const items: { personaje_id: string; instancia: string; cantidad: number }[] = [];
-    const quien = sala.turnoDe() ?? sala.estado().jugadores[0]?.personaje_id;
+    const turno = sala.turnoDe();
+    const quien = turno && !sala.esMonstruo(turno) ? turno : sala.estado().jugadores[0]?.personaje_id;
     for (const r of quien ? destino.items ?? [] : []) {
       try {
-        const o = await this.otorgarItem(sala, autor, quien!, r, extra);
+        const o = await this.inventario.otorgarItem(sala, autor, quien!, r, extra);
         eventos.push(o.evento);
         items.push({ personaje_id: quien!, instancia: o.instancia, cantidad: o.cantidad });
       } catch (err) {
@@ -667,28 +638,8 @@ export class Gestor {
     return { nombre: pj.nombre, extra: r.valor };
   }
 
-  /** Igual que cambiarDatos, pero sobre el inventario (`fn` devuelve el inventario nuevo y lo que haga falta anunciar). */
-  private cambiarInventario<T extends { inv: Inventario }>(
-    sala: Sala, personajeId: string, fn: (inv: Inventario) => { ok: true; valor: T } | { ok: false; error: string },
-  ): Promise<{ nombre: string; extra: T & { datos: DatosPersonaje } }> {
-    return this.cambiarDatos(sala, personajeId, (datos) => {
-      const r = fn(leerInventario(datos));
-      return r.ok ? { ok: true, valor: { ...r.valor, datos: conInventario(datos, r.valor.inv) } } : r;
-    });
-  }
 
-  /** "Torvald recibe Espada larga": anuncio en la mesa (y estado nuevo para todos). */
-  private anunciar(sala: Sala, autor: string, texto: string, extra: Record<string, unknown> = {}) {
-    return this.publicar(sala, 'estado', autor, { ...extra, cambio: 'inventario', texto });
-  }
 
-  /** Da un objeto y lo anuncia. Devuelve la instancia (para que "Deshacer IA" pueda quitarlo). */
-  private async otorgarItem(sala: Sala, autor: string, personajeId: string, pedido: PedidoItem, extra: Record<string, unknown>) {
-    const r = await this.cambiarInventario(sala, personajeId, (inv) => otorgarItem(inv, pedido, () => randomUUID()));
-    const { item } = r.extra;
-    const evento = await this.anunciar(sala, autor, `${r.nombre} recibe ${item.cantidad > 1 ? `${item.cantidad} × ` : ''}${item.nombre}.`, extra);
-    return { evento, instancia: item.instancia, cantidad: item.cantidad };
-  }
 
   /** Publica la introducción con los nombres de los personajes como primer mensaje fijo. */
   private async mostrarIntroduccion(sala: Sala, autor: string) {
