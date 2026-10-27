@@ -28,6 +28,8 @@ const contexto = (): Contexto => ({
   introduccion: null,
   monstruos: [],
   criaturas: [{ srd_clave: 'kobold', nombre: 'Kobold' }],
+  turno_de: null,
+  ronda: 1,
 });
 
 const uso = { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
@@ -59,6 +61,7 @@ function accionesFalsas() {
     fijarVariable: async (n, v) => (hechas.push(`var:${n}=${v}`), 'ok'),
     aplicarPg: async (p, n, m) => (hechas.push(`pg:${p}:${n}:${m}`), 'ok'),
     otorgarItem: async (p, i, n, m) => (hechas.push(`item:${p}:${i}:${n}:${m}`), 'ok'),
+    pasarTurno: async () => (hechas.push('turno'), 'ok'),
   };
   return { acciones, hechas };
 }
@@ -248,4 +251,35 @@ test('el prompt exige narrar el resultado sin inventar cifras, pedir el daño y 
   assert.match(s, /sin inventar cifras de daño ni PG de monstruos/);
   assert.match(s, /si fue un ataque exitoso y falta el daño, pide la tirada de daño con su motivo/);
   assert.match(s, /quién actúa a continuación o qué debe hacer el jugador/);
+});
+
+test('el contexto lista armas, objetos, habilidades y el turno; la regla pide negar lo que no tienen', () => {
+  const ficha = {
+    ...jugador,
+    armas: [{ nombre: 'Estoque', ataque: '+5', dano: '1d8+3 perforante' }],
+    inventario: [{ instancia: 'i1', item_id: 'pocion_curacion', nombre: 'Poción de curación', tipo: 'pocion' as const, cantidad: 2, descripcion: '' }],
+    habilidades: [{ instancia: 'h1', rasgo_id: 'ataque_furtivo', nombre: 'Ataque furtivo', descripcion: '', uso: 'a_voluntad' as const, usos_max: 0, usos_restantes: 0 }],
+  };
+  const p = promptContexto({ ...contexto(), jugadores: [ficha], turno_de: 'pj1', ronda: 3 }, 'x');
+  assert.match(p, /Armas: Estoque \+5 1d8\+3 perforante\. Objetos: Poción de curación ×2\. Habilidades: Ataque furtivo\. Hechizos: ninguno\./);
+  assert.match(p, /Turno de Brisa \(ronda 3\)/);
+  assert.match(promptSistema(PERFILES_INICIALES[0]), /niégalo dentro de la ficción/);
+});
+
+test('pasar_turno una vez por intervención; daño sin objetivo con monstruos vivos se rechaza', async () => {
+  const kobold = { id: 'm1', nombre: 'Kobold 1', srd_clave: 'kobold', ca: 12, pg_max: 5, pg_actual: 5, ataques: [], imagen_url: null };
+  const { cliente, peticiones } = clienteFalso([
+    respuesta([
+      herramienta('pedir_tirada', { jugador: 'pj1', tirada: '1d8+3', motivo: 'Daño del estoque al kobold', efecto: 'daño' }, 'a'),
+      herramienta('pasar_turno', {}, 'b'),
+      herramienta('pasar_turno', {}, 'c'),
+    ]),
+    respuesta([], 'end_turn'),
+  ]);
+  const { acciones, hechas } = accionesFalsas();
+  await new GmIa({ cliente, presupuesto: presupuesto() }).turno(async () => ({ ...contexto(), monstruos: [kobold] }), 'x', acciones, () => {});
+  assert.deepEqual(hechas, ['turno']);
+  const r = peticiones[1].messages.at(-1)!.content as Anthropic.ToolResultBlockParam[];
+  assert.match(String(r[0].content), /objetivo_monstruo/);
+  assert.deepEqual(r.map((x) => Boolean(x.is_error)), [true, false, true]);
 });

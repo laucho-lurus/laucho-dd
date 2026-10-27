@@ -33,6 +33,8 @@ export interface Contexto {
   introduccion: string | null; // ya leída a los jugadores, con sus nombres
   monstruos: Monstruo[];
   criaturas: { srd_clave: string; nombre: string }[]; // las que se pueden sacar
+  turno_de: string | null;
+  ronda: number;
 }
 
 /** Para qué sirve una tirada pedida contra un monstruo. */
@@ -50,6 +52,7 @@ export interface Acciones {
   fijarVariable(nombre: string, valor: boolean | number | string): Promise<string>;
   aplicarPg(personajeId: string, cantidad: number, motivo: string): Promise<string>;
   otorgarItem(personajeId: string, itemId: string, cantidad: number, motivo: string): Promise<string>;
+  pasarTurno(): Promise<string>;
 }
 
 export type Aviso = (nivel: EstadoGasto['nivel'], estado: EstadoGasto) => void;
@@ -62,6 +65,8 @@ Reglas que siempre cumples:
 - Monstruos: sácalos con "agregar_monstruos". Para que un personaje los ataque, usa "pedir_tirada" con objetivo_monstruo y efecto "ataque" (el servidor usa su CA y te dirá si acierta); si acierta, pide el daño con efecto "daño" y el servidor restará sus PG y te dirá si cae. Nunca inventes ni cambies los PG de un monstruo.
 - Daño y curación a personajes: solo con "aplicar_pg", y solo tras una tirada ya resuelta o una consecuencia clara de la ficción. Nunca inventes una tirada para justificarlo. Máximo 25 PG por llamada y 2 llamadas por intervención. Si la herramienta no está disponible, propón el daño en la narración y lo aplicará el GM humano.
 - Objetos: solo con "otorgar_item", como recompensa clara de la ficción (un cofre, un pago, un botín). Un objeto por intervención; nada de objetos mágicos poderosos ni oro desmedido.
+- Turnos: cuando la acción del jugador que tiene el turno queda resuelta (sin tiradas pendientes), llama a "pasar_turno" y di quién sigue. Si te escribe alguien sin turno, recuérdale amablemente de quién es el turno.
+- Cada personaje solo puede usar lo que figura en su ficha (armas, objetos, habilidades). Si alguien intenta lanzar un hechizo, usar un objeto o una habilidad que no tiene, niégalo dentro de la ficción ("buscas en tu mochila, pero no hay ninguna poción") y no lo resuelvas.
 - Solo avanzas a las salidas listadas del nodo actual ("avanzar_nodo") y solo cambias variables que ya existen ("fijar_variable").
 - Las notas del nodo y las CD son secretas: no las reveles a los jugadores.
 - Respetas las decisiones de los jugadores y les das algo concreto que hacer al final.
@@ -113,6 +118,11 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       },
       required: ['personaje', 'cantidad', 'motivo'],
     },
+  },
+  {
+    name: 'pasar_turno',
+    description: 'Da el turno al siguiente personaje del orden (salta a los inconscientes). Úsala cuando la acción del que tiene el turno quede resuelta.',
+    input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'otorgar_item',
@@ -186,7 +196,11 @@ export function promptContexto(c: Contexto, disparador: string): string {
     .map((f) => `- a "${f.hasta}" (${buscarNodo(c.campana.diagrama, f.hasta)?.titulo ?? '?'}): ${f.etiqueta}${f.condicion ? ` [si: ${f.condicion}]` : ''}`);
   const fichas = c.jugadores.map((j) => {
     const car = Object.entries(j.caracteristicas).map(([k, v]) => `${k.toUpperCase()} ${v}`).join(', ');
-    return `- ${j.nombre} (id ${j.personaje_id}): ${j.raza} ${j.clase} ${j.nivel}, PG ${j.pg_actual}/${j.pg_max}${j.inconsciente ? ' INCONSCIENTE' : ''}, CA ${j.ca ?? '?'}, ${car}`;
+    const armas = j.armas.map((a) => `${a.nombre} ${a.ataque} ${a.dano}`).join('; ') || '—';
+    const objetos = j.inventario.map((i) => `${i.nombre}${i.cantidad > 1 ? ` ×${i.cantidad}` : ''}`).join(', ') || 'nada';
+    const habilidades = j.habilidades.map((h) => `${h.nombre}${h.uso === 'a_voluntad' ? '' : ` (${h.usos_restantes}/${h.usos_max})`}`).join(', ') || 'ninguna';
+    return `- ${j.nombre} (id ${j.personaje_id}): ${j.raza} ${j.clase} ${j.nivel}, PG ${j.pg_actual}/${j.pg_max}${j.inconsciente ? ' INCONSCIENTE' : ''}, CA ${j.ca ?? '?'}, ${car}
+  Armas: ${armas}. Objetos: ${objetos}. Habilidades: ${habilidades}. Hechizos: ninguno.`;
   });
   return `Campaña: ${c.campana.nombre}. ${c.campana.resumen}
 ${c.introduccion ? `\nIntroducción (ya leída a los jugadores; no la repitas ni la contradigas): ${c.introduccion}\n` : ''}
@@ -198,8 +212,9 @@ ${lineasSalidas.join('\n') || '- ninguna (final)'}
 
 Variables: ${JSON.stringify(c.variables)}
 
-Personajes en la mesa:
+Personajes en la mesa (solo pueden usar lo que figura aquí):
 ${fichas.join('\n') || '- nadie'}
+${c.turno_de ? `Turno de ${c.jugadores.find((j) => j.personaje_id === c.turno_de)?.nombre ?? '?'} (ronda ${c.ronda}).` : 'Sin orden de turnos.'}
 
 Monstruos (los PG exactos son secretos; a los jugadores descríbeles solo su estado):
 ${c.monstruos.map((m) => `- ${m.nombre} (id ${m.id}): ${estadoMonstruo(m)}, PG ${m.pg_actual}/${m.pg_max}, CA ${m.ca}, ataques: ${m.ataques.map((a) => `${a.nombre} ${a.ataque} ${a.dano}`).join('; ') || '—'}`).join('\n') || '- ninguno'}
@@ -222,6 +237,7 @@ interface Cuenta {
   narraciones: number;
   motivos_fallidos: number;
   items: number;
+  turnos: number;
 }
 
 async function ejecutar(
@@ -250,6 +266,8 @@ async function ejecutar(
       }
       const efecto = e.efecto === 'ataque' || e.efecto === 'daño' ? e.efecto : null;
       const objetivo = typeof e.objetivo_monstruo === 'string' && e.objetivo_monstruo ? e.objetivo_monstruo : null;
+      // Sin objetivo el servidor no puede restar los PG y el monstruo nunca caería.
+      if (efecto && !objetivo && c.monstruos.some((m) => m.pg_actual > 0)) return falla('Para un ataque o daño contra un monstruo indica objetivo_monstruo (su id)');
       if (objetivo) {
         const m = c.monstruos.find((x) => x.id === objetivo);
         if (!m) return falla(`Ese monstruo no existe. Monstruos: ${c.monstruos.map((x) => x.id).join(', ') || 'ninguno'}`);
@@ -278,6 +296,10 @@ async function ejecutar(
       cuenta.pg += 1;
       return { texto: await acciones.aplicarPg(e.personaje as string, n, e.motivo.trim()), error: false };
     }
+    case 'pasar_turno':
+      if (cuenta.turnos >= 1) return falla('Ya pasaste el turno en esta intervención');
+      cuenta.turnos += 1;
+      return { texto: await acciones.pasarTurno(), error: false };
     case 'otorgar_item': {
       if (cuenta.items >= 1) return falla('Ya diste un objeto en esta intervención');
       if (!c.jugadores.some((j) => j.personaje_id === e.personaje)) return falla('Ese personaje no está en la mesa; usa un id de la lista');
@@ -354,7 +376,7 @@ Entre 3 y 5 frases, en español: un lugar concreto, el encargo que reciben los h
    */
   async turno(contexto: () => Promise<Contexto>, disparador: string, acciones: Acciones, avisar: Aviso): Promise<void> {
     let c = await contexto();
-    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0, items: 0 };
+    const cuenta: Cuenta = { pg: 0, narraciones: 0, motivos_fallidos: 0, items: 0, turnos: 0 };
     const herramientas = c.permitir_pg ? HERRAMIENTAS : HERRAMIENTAS.filter((h) => h.name !== 'aplicar_pg');
     const sistema: Anthropic.TextBlockParam[] = [{ type: 'text', text: promptSistema(c.perfil), cache_control: { type: 'ephemeral' } }];
     const mensajes: Anthropic.MessageParam[] = [{ role: 'user', content: promptContexto(c, disparador) }];

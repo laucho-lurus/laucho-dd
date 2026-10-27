@@ -8,6 +8,7 @@ import {
   usarHabilidad, type Inventario, type PedidoItem,
 } from '../rules/inventario.ts';
 import { generarCodigo } from './codigo.ts';
+import { rasgosDeClase } from '../rules/rasgos.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
 import { Sala, type Cliente, type Rol } from './sala.ts';
@@ -64,7 +65,8 @@ export class Gestor {
           avanzarNodo: (sala, autor, id, extra, estricto) => this.avanzarNodo(sala, autor, id, extra, estricto),
           criaturas: async (sala) => (await this.plantillas(sala)).map(({ srd_clave, nombre }) => ({ srd_clave, nombre })),
           guardarEstado: (sala) => this.guardarEstado(sala),
-          otorgarItem: (sala, autor, id, pedido, extra) => this.otorgarItem(sala, autor, id, pedido, extra),
+          pasarTurno: (sala, autor, extra) => this.pasarTurno(sala, autor, extra),
+      otorgarItem: (sala, autor, id, pedido, extra) => this.otorgarItem(sala, autor, id, pedido, extra),
       aplicarPg: (sala, autor, id, cantidad, extra) => this.aplicarPg(sala, autor, id, cantidad, extra),
         }, ia.tiempo_maximo_ms)
       : null;
@@ -212,7 +214,19 @@ export class Gestor {
   private async unirse(sala: Sala, personajeId: string, cliente: Cliente) {
     const r = sala.sentarJugador(personajeId, cliente);
     if (!r.ok) throw new ErrorDeJuego(r.error);
-    const nombre = sala.personaje(personajeId)!.nombre;
+    const pj = sala.personaje(personajeId)!;
+    const nombre = pj.nombre;
+    // Primera vez en una mesa: recibe las habilidades de su clase (luego quedan guardadas en su ficha).
+    if (pj.datos.habilidades === undefined) {
+      await this.cambiarInventario(sala, personajeId, (inv) => {
+        let actual = inv;
+        for (const r of rasgosDeClase(pj.clase)) {
+          const h = otorgarHabilidad(actual, { rasgo_id: r.id }, () => randomUUID());
+          if (h.ok) actual = h.valor.inv;
+        }
+        return { ok: true, valor: { inv: actual } };
+      });
+    }
     await this.bienvenida(sala, cliente, { rol: 'jugador', personaje_id: personajeId });
     await this.publicar(sala, 'estado', 'sistema', { cambio: 'entra', personaje_id: personajeId, personaje_nombre: nombre });
   }
@@ -245,7 +259,7 @@ export class Gestor {
         // Así la franja "Qué sigue" pasa directo a "IA pensando…" sin un parpadeo intermedio.
         if (this.ia?.responderia(sala)) sala.ia_pensando = true;
         await this.publicar(sala, 'accion', autor, { texto: m.texto, personaje_nombre: nombre });
-        return this.ia?.disparar(sala, `${nombre} (jugador) hace: ${m.texto}`);
+        return this.ia?.disparar(sala, `${nombre} (jugador) hace: ${m.texto}`, quien.personaje_id);
       case 'chat': {
         // Charla entre jugadores: no gasta turno y no despierta a la IA.
         const ahora = Date.now();
@@ -273,7 +287,7 @@ export class Gestor {
           ? ` contra la CA de ${objetivo.nombre}: ${exito ? 'ACIERTA' : 'FALLA'}`
           : ` contra CD ${peticion.cd}: ${exito ? 'ÉXITO' : 'FRACASO'}`;
         const dano = peticion.efecto === 'daño' && objetivo ? await this.danarMonstruo(sala, objetivo.id, r.total, peticion.de_ia === true) : '';
-        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.${dano ? ` ${dano}` : ''}`);
+        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.${dano ? ` ${dano}` : ''}`, sala.turnoDe() === quien.personaje_id ? quien.personaje_id : null);
       }
       case 'pedir_tirada':
         soloGm(quien);
@@ -439,9 +453,7 @@ export class Gestor {
       }
       case 'siguiente_turno': {
         soloGm(quien);
-        const r = sala.siguienteTurno();
-        if (!r.ok) throw new ErrorDeJuego(r.error);
-        return this.publicar(sala, 'estado', autor, { cambio: 'turno', turno_de: sala.turnoDe(), ronda: sala.estado().ronda });
+        return this.pasarTurno(sala, autor, {});
       }
       default:
         throw new ErrorDeJuego('Ya estás en una sala');
@@ -516,6 +528,13 @@ export class Gestor {
     return { evento, nuevos: r.nuevos };
   }
 
+  /** Todos los monstruos cayeron: salen de la mesa y del mapa, y se anuncia. */
+  private async terminarCombate(sala: Sala) {
+    const caidos = sala.retirarCaidos();
+    await this.guardarMonstruos(sala);
+    await this.publicar(sala, 'estado', 'sistema', { cambio: 'fin_combate', texto: `¡Combate terminado! Cayeron: ${caidos.map((m) => m.nombre).join(', ')}.` });
+  }
+
   /** Resta PG a un monstruo, lo anuncia y, si la tirada la pidió la IA, lo apunta para deshacer. */
   private async danarMonstruo(sala: Sala, id: string, cantidad: number, deIa: boolean): Promise<string> {
     const r = sala.pgMonstruo(id, -cantidad);
@@ -524,8 +543,19 @@ export class Gestor {
     const cae = r.monstruo.pg_actual === 0;
     const texto = cae ? `${r.monstruo.nombre} cae.` : `${r.monstruo.nombre} recibe ${-r.delta} de daño.`;
     const evento = await this.publicar(sala, 'estado', 'sistema', { cambio: 'monstruos', texto });
+    if (cae && !sala.enCombate()) await this.terminarCombate(sala);
     if (deIa) sala.anotarIntervencion({ monstruos: [{ id, delta: r.delta }], eventos: evento.id === null ? [] : [evento.id] }, this.ia?.responderia(sala) ?? false);
     return `${texto} (${r.monstruo.nombre}: ${r.monstruo.pg_actual}/${r.monstruo.pg_max} PG)`;
+  }
+
+  /** Siguiente turno (salta inconscientes) con anuncio para toda la mesa. */
+  private async pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>) {
+    const r = sala.siguienteTurno();
+    if (!r.ok) throw new ErrorDeJuego(r.error);
+    const turno_de = sala.turnoDe();
+    const ronda = sala.estado().ronda;
+    const texto = `Turno de ${sala.personaje(turno_de ?? '')?.nombre ?? '?'} (ronda ${ronda}).`;
+    return this.publicar(sala, 'estado', autor, { ...extra, cambio: 'turno', turno_de, ronda, texto });
   }
 
   /** El GM actúa sobre el personaje que indique; un jugador, siempre sobre el suyo. */

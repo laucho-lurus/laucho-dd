@@ -315,14 +315,22 @@ export class Sala {
     return ok;
   }
 
+  /** Pasa al siguiente del orden, saltando a los inconscientes (0 PG). Si todos lo están, avanza uno. */
   siguienteTurno(): Resultado {
     if (this.orden.length === 0) return error('No hay orden de turnos');
-    this.turno += 1;
-    if (this.turno >= this.orden.length) {
-      this.turno = 0;
-      this.ronda += 1;
+    for (let i = 0; i < this.orden.length; i++) {
+      this.turno += 1;
+      if (this.turno >= this.orden.length) {
+        this.turno = 0;
+        this.ronda += 1;
+      }
+      if ((this.pg.get(this.orden[this.turno]) ?? 1) > 0) break;
     }
     return ok;
+  }
+
+  tienePeticion(personajeId: string): boolean {
+    return this.peticiones.has(personajeId);
   }
 
   estado(): EstadoSala {
@@ -439,6 +447,18 @@ export class Sala {
     }));
     this.monstruos = [...this.monstruos, ...nuevos];
     return { ok: true, nuevos };
+  }
+
+  /** Hay combate mientras quede algún monstruo en pie. */
+  enCombate(): boolean {
+    return this.monstruos.some((m) => m.pg_actual > 0);
+  }
+
+  /** Fin del combate: saca de la mesa (y del mapa) a todos los monstruos caídos. Devuelve los que salieron. */
+  retirarCaidos(): Monstruo[] {
+    const caidos = this.monstruos.filter((m) => m.pg_actual === 0);
+    for (const m of caidos) this.quitarMonstruo(m.id);
+    return caidos;
   }
 
   quitarMonstruo(id: string): Resultado {

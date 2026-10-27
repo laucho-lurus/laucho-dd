@@ -27,6 +27,8 @@ export interface Puertos {
   /** Pasa a otro nodo: efectos de la flecha, monstruos del combate y anuncio. `estricto`: respeta condiciones. */
   avanzarNodo(sala: Sala, autor: string, nodoId: string, extra: Record<string, unknown>, estricto: boolean): Promise<{ eventos: (Evento | { id: null })[]; monstruos: string[]; items: IntervencionIa['items']; resumen: string }>;
   /** Da un objeto del catálogo y lo anuncia. Devuelve la instancia para poder deshacerlo. */
+  /** Pasa el turno (salta inconscientes) y lo anuncia a la mesa. */
+  pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>): Promise<Evento | { id: null }>;
   otorgarItem(sala: Sala, autor: string, personajeId: string, pedido: { item_id: string; cantidad: number }, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; instancia: string; cantidad: number }>;
   registro(mensaje: string, err?: unknown): void;
   guardarEstado(sala: Sala): Promise<void>;
@@ -86,7 +88,8 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
   }
 
   /** Lanza una intervención de la IA sin bloquear la sala. */
-  disparar(sala: Sala, disparador: string) {
+  /** `actor`: el personaje cuya acción o tirada despierta a la IA (para pasar su turno si la IA lo olvida). */
+  disparar(sala: Sala, disparador: string, actor: string | null = null) {
     const ia = sala.ia;
     if (!this.gm || !ia || ia.pausada) return;
     if (this.enCurso.has(sala)) {
@@ -101,7 +104,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
         listo();
       }, this.tiempoMaximo);
     });
-    const intervencion = Promise.race([this.intervenir(sala, disparador), limite]).finally(() => {
+    const intervencion = Promise.race([this.intervenir(sala, disparador, actor), limite]).finally(() => {
       clearTimeout(reloj);
       this.enCurso.delete(sala);
       this.marcarPensando(sala, false);
@@ -169,7 +172,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     return ultima;
   }
 
-  private async intervenir(sala: Sala, disparador: string) {
+  private async intervenir(sala: Sala, disparador: string, actor: string | null) {
     const gm = this.gm!;
     const perfil = sala.ia!.perfil;
     const firma = `GM IA · ${perfil.nombre}`;
@@ -177,6 +180,7 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
     const cambiosPg: IntervencionIa['pg'] = [];
     const agregados: string[] = [];
     const items: IntervencionIa['items'] = [];
+    let paso = false;
     const anotar = (e: Evento | { id: null }) => {
       if (e.id !== null) ids.push(e.id);
     };
@@ -193,6 +197,8 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
           introduccion: sala.introduccion_mostrada ? sala.introduccionRellena() : null,
           monstruos: sala.listaMonstruos(),
           criaturas: await this.puertos.criaturas(sala),
+          turno_de: sala.turnoDe(),
+          ronda: sala.estado().ronda,
         }),
         disparador,
         {
@@ -236,6 +242,15 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
             if (r.delta !== 0) cambiosPg.push({ personaje_id: personajeId, delta: r.delta });
             return `PG cambiados en ${r.delta} (${sala.pgDe(personajeId)} actuales)`;
           }),
+          pasarTurno: () => sala.encolar(async () => {
+            try {
+              anotar(await this.puertos.pasarTurno(sala, AUTOR_IA, { ia: true, firma }));
+              paso = true;
+              return `Turno de ${sala.personaje(sala.turnoDe() ?? '')?.nombre ?? 'nadie'}`;
+            } catch (err) {
+              return (err as Error).message;
+            }
+          }),
           otorgarItem: (personajeId, itemId, cantidad, motivo) => sala.encolar(async () => {
             try {
               const r = await this.puertos.otorgarItem(sala, AUTOR_IA, personajeId, { item_id: itemId, cantidad }, { motivo, ia: true, firma });
@@ -258,6 +273,12 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
           if (texto) void sala.encolar(() => this.puertos.publicar(sala, 'estado', 'sistema', { cambio: 'ia_gasto', nivel, texto }));
         },
       );
+      // Red de seguridad en combate: si la acción del que tiene el turno quedó resuelta y la IA no pasó el turno, lo pasa el servidor.
+      if (actor && !paso) {
+        await sala.encolar(async () => {
+          if (sala.enCombate() && sala.turnoDe() === actor && !sala.tienePeticion(actor)) anotar(await this.puertos.pasarTurno(sala, 'sistema', {}));
+        });
+      }
     } catch (err) {
       this.puertos.registro('[ia] la intervención falló:', err);
       // Mensaje del SDK o de red; nunca incluye la key.

@@ -36,4 +36,11 @@ export const RASGOS: Readonly<Record<string, RasgoCatalogo>> = Object.fromEntrie
   r('recuperacion_arcana', 'Mago', 'Recuperación arcana', 'Tras un descanso corto, recuperas espacios de conjuro de nivel total igual a la mitad de tu nivel.', 'por_descanso', 1, 'largo'),
 ].map((x) => [x.id, x]));
 
-export const rasgosDeClase = (clase: string) => Object.values(RASGOS).filter((x) => x.clase === clase);
+// Las fichas pueden guardar la clase en femenino ("Pícara", "Maga"): se lleva al nombre del catálogo.
+const FEMENINOS: Record<string, string> = {
+  Bárbara: 'Bárbaro', Barda: 'Bardo', Clériga: 'Clérigo', Guerrera: 'Guerrero', Monja: 'Monje', Paladina: 'Paladín',
+  Exploradora: 'Explorador', Pícara: 'Pícaro', Hechicera: 'Hechicero', Bruja: 'Brujo', Maga: 'Mago',
+};
+export const claseBase = (clase: string) => FEMENINOS[clase.trim()] ?? clase.trim();
+
+export const rasgosDeClase = (clase: string) => Object.values(RASGOS).filter((x) => x.clase === claseBase(clase));
