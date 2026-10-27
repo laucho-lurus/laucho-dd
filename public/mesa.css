@@ -259,3 +259,8 @@ button.mini.quitar { background: transparent; color: var(--tenue); border: 1px s
 .barra.xp span { background: #8a6d2c; }
 .barra small { position: relative; display: block; text-align: center; font-size: .75rem; line-height: 18px; color: #fff; }
 select.mini { padding: 2px 4px; font-size: .8rem; max-width: 120px; }
+
+/* Combate: turno del enemigo y salvaciones de muerte */
+.gm-combate .turno-enemigo b { color: var(--oro); }
+.ficha .muerte { margin: 6px 0; padding: 6px 8px; border: 1px solid #8b2c2c; border-radius: 6px; color: #e6b3b3; font-size: .85rem; }
+.ficha .muerte.muerto { background: rgba(139, 44, 44, .35); }

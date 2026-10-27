@@ -8,6 +8,7 @@ import { crearMapaTactico } from './mapa.js';
 import { autoDisponer } from './editor/tipos.js';
 import { actualizarSelectorDar, iniciarPanelObjetos, pintarInventario } from './inventario.js';
 import { pintarMagia } from './magia.js';
+import { pintarCombateGm, pintarMuerte } from './combate.js';
 
 const LARGO_CODIGO = 6;
 const claveToken = (codigo) => `gm-token:${codigo}`;
@@ -32,6 +33,7 @@ const $ = (id) => document.getElementById(id);
 
 let estado = null;
 let miRol = null; // { rol: 'gm' } | { rol: 'jugador', personaje_id }
+let iaEnSala = false; // la sala tiene GM IA (los enemigos atacan solos)
 
 const servidor = conectar(recibir, () => aviso('Se perdió la conexión. Recarga la página para volver.'));
 // Modo GM: la misma página servida en la ruta del GM (/gm o GM_RUTA) con <body data-modo="gm">.
@@ -125,6 +127,7 @@ function actualizar(nuevoEstado) {
   if (esGm) {
     actualizarSelectorPedir();
     actualizarSelectorDar(estado.jugadores);
+    pintarCombateGm(estado, (m) => servidor.enviar(m), iaEnSala);
   } else mostrarPeticion(estado.jugadores.find((j) => j.personaje_id === miRol?.personaje_id)?.tirada_pendiente);
   // El jugador ve siempre su ficha (su inventario); el GM, la de quien tiene el turno.
   const id = esGm ? estado.turno_de : miRol?.personaje_id;
@@ -134,6 +137,7 @@ function actualizar(nuevoEstado) {
     const propio = esGm || jugador.personaje_id === miRol?.personaje_id;
     pintarInventario($('ficha'), jugador, { propio, esGm, enviar: (m) => servidor.enviar(m) });
     // Lanzar es cosa del jugador: el GM ve los hechizos pero no los lanza.
+    pintarMuerte($('ficha'), jugador);
     pintarMagia($('ficha'), jugador, { propio: !esGm && propio, monstruos: estado.monstruos, jugadores: estado.jugadores, enviar: (m) => servidor.enviar(m) });
   }
 }
@@ -162,6 +166,7 @@ function pintarPanel(p) {
   if (p.ia?.pensando) relojIa = setTimeout(() => pintarPanel({ ...p, ia: { ...p.ia, pensando: false } }), ESPERA_IA_MS);
   $('panel-gm').hidden = false;
   const ia = p.ia;
+  iaEnSala = Boolean(ia);
   const estado = $('ia-estado');
   estado.className = `ia-estado${p.gasto?.nivel === 'aviso' ? ' aviso-gasto' : p.gasto?.nivel === 'agotado' ? ' agotado' : ''}`;
   const usd = (n) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`);
