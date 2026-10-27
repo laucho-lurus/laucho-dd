@@ -4,7 +4,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Anthropic from '@anthropic-ai/sdk';
-import { Gestor } from './gestor.ts';
+import { Gestor, type OpcionesAzar } from './gestor.ts';
+import { roll } from '../rules/dice.ts';
 import { RepositorioMemoria } from './repositorio-memoria.ts';
 import { CAMPANA_DEMO_ID, DATOS_DEMO } from './demo.ts';
 import { GmIa, type ClienteIa } from '../ia/gm-ia.ts';
@@ -19,7 +20,7 @@ const respuesta = (bloques: unknown[], stop = 'tool_use') =>
   ({ content: bloques, stop_reason: stop, usage: { input_tokens: 100, output_tokens: 50 } }) as unknown as Anthropic.Message;
 const usar = (name: string, input: unknown) => ({ type: 'tool_use', id: `t-${name}-${Math.random()}`, name, input });
 
-async function mesa(respuestas: Anthropic.Message[], conIa = true, tiempo_maximo_ms?: number) {
+async function mesa(respuestas: Anthropic.Message[], conIa = true, tiempo_maximo_ms?: number, azar: OpcionesAzar = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'mesa-ia-'));
   const llamadas: Anthropic.MessageCreateParamsNonStreaming[] = [];
   const cliente: ClienteIa = {
@@ -32,7 +33,7 @@ async function mesa(respuestas: Anthropic.Message[], conIa = true, tiempo_maximo
     },
   };
   const gm = conIa ? new GmIa({ cliente, presupuesto: new Presupuesto(join(dir, 'gasto.json'), 5) }) : null;
-  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {}, { gm, perfiles: new Perfiles(join(dir, 'perfiles.json')), tiempo_maximo_ms });
+  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {}, { gm, perfiles: new Perfiles(join(dir, 'perfiles.json')), tiempo_maximo_ms }, azar);
   const conectar = () => {
     const recibidos: Msj[] = [];
     const c = gestor.conectar({ enviar: (m) => recibidos.push(m as Msj) });
@@ -328,7 +329,7 @@ test('monstruos: la IA los saca, el ataque usa su CA y el daño baja sus PG hast
     respuesta([usar('pedir_tirada', { jugador: BRISA, tirada: '1d4+100', motivo: 'Ataque con estoque al Kobold 1', objetivo_monstruo: 'm1', efecto: 'ataque' })]),
     respuesta([usar('pedir_tirada', { jugador: BRISA, tirada: '1d4+100', motivo: 'Daño del estoque al Kobold 1', objetivo_monstruo: 'm1', efecto: 'daño' })]),
     respuesta([usar('narrar', { texto: 'Cae.' })], 'end_turn'),
-  ]);
+  ], true, undefined, { tirar: (n) => (n === '1d20' ? { notation: n, total: 1, rolls: [1], kept: [1], modifier: 0 } : roll(n)) }); // los kobolds fallan siempre
   await humano.enviar({ tipo: 'narrar_escena' });
   await gestor.esperarIa(codigo);
   assert.deepEqual(jugador.ultimo().estado.monstruos, [

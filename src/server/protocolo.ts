@@ -17,7 +17,7 @@ export type MensajeCliente =
   | { tipo: 'narracion'; texto: string }
   | { tipo: 'tirar'; notacion: string; motivo?: string }
   | { tipo: 'definir_orden'; orden: string[] }
-  | { tipo: 'pedir_tirada'; personaje_id: string; notacion?: string; chequeo?: string; motivo?: string; cd?: number }
+  | { tipo: 'pedir_tirada'; personaje_id: string; notacion?: string; chequeo?: string; motivo?: string; cd?: number; objetivo_monstruo?: string; efecto?: 'ataque' | 'daño' }
   | { tipo: 'aplicar_pg'; personaje_id: string; cantidad: number }
   | { tipo: 'narrar_escena' }
   | { tipo: 'pausar_ia'; pausada: boolean }
@@ -46,6 +46,10 @@ export type MensajeCliente =
   | { tipo: 'ia_permitir_pg'; permitido: boolean }
   | { tipo: 'cambiar_nodo'; nodo_id: string }
   | { tipo: 'siguiente_turno' }
+  | { tipo: 'atacar_monstruo'; monstruo_id: string; objetivo_personaje?: string }
+  | { tipo: 'opciones_combate'; enemigos_auto?: boolean; pifias?: boolean }
+  | { tipo: 'estabilizar'; personaje_id: string }
+  | { tipo: 'revivir_grupo' }
   | { tipo: 'estado' };
 
 export type Validacion = { ok: true; mensaje: MensajeCliente } | { ok: false; error: string };
@@ -143,7 +147,14 @@ export function validarMensaje(crudo: string): Validacion {
       if (esError(motivo)) return falla(motivo.error);
       const cd = entero(m, 'cd', 1, MAX_CD);
       if (esError(cd)) return falla(cd.error);
-      return bien({ tipo: 'pedir_tirada', personaje_id, ...(chequeo ? { chequeo } : { notacion }), ...(motivo && { motivo }), ...(cd !== undefined && { cd }) });
+      const objetivo_monstruo = m.objetivo_monstruo === undefined || m.objetivo_monstruo === '' ? undefined : texto(m, 'objetivo_monstruo', MAX_ID);
+      if (esError(objetivo_monstruo)) return falla(objetivo_monstruo.error);
+      if (m.efecto !== undefined && m.efecto !== 'ataque' && m.efecto !== 'daño') return falla('"efecto" debe ser ataque o daño');
+      if (objetivo_monstruo && !m.efecto) return falla('Con "objetivo_monstruo" indica "efecto" (ataque o daño)');
+      return bien({
+        tipo: 'pedir_tirada', personaje_id, ...(chequeo ? { chequeo } : { notacion }), ...(motivo && { motivo }), ...(cd !== undefined && { cd }),
+        ...(objetivo_monstruo && { objetivo_monstruo, efecto: m.efecto as 'ataque' | 'daño' }),
+      });
     }
     case 'aplicar_pg': {
       const personaje_id = texto(m, 'personaje_id', MAX_ID);
@@ -291,6 +302,30 @@ export function validarMensaje(crudo: string): Validacion {
       const nodo_id = texto(m, 'nodo_id', MAX_ID);
       return esError(nodo_id) ? falla(nodo_id.error) : bien({ tipo: 'cambiar_nodo', nodo_id });
     }
+    case 'atacar_monstruo': {
+      const monstruo_id = texto(m, 'monstruo_id', MAX_ID);
+      if (esError(monstruo_id)) return falla(monstruo_id.error);
+      const objetivo = m.objetivo_personaje === undefined || m.objetivo_personaje === '' ? undefined : texto(m, 'objetivo_personaje', MAX_ID);
+      if (esError(objetivo)) return falla(objetivo.error);
+      return bien({ tipo: 'atacar_monstruo', monstruo_id, ...(objetivo && { objetivo_personaje: objetivo }) });
+    }
+    case 'opciones_combate': {
+      for (const campo of ['enemigos_auto', 'pifias']) {
+        if (m[campo] !== undefined && typeof m[campo] !== 'boolean') return falla(`"${campo}" debe ser verdadero o falso`);
+      }
+      return bien({
+        tipo: 'opciones_combate',
+        ...(typeof m.enemigos_auto === 'boolean' && { enemigos_auto: m.enemigos_auto }),
+        ...(typeof m.pifias === 'boolean' && { pifias: m.pifias }),
+      });
+    }
+    case 'estabilizar': {
+      const personaje_id = texto(m, 'personaje_id', MAX_ID);
+      if (esError(personaje_id)) return falla(personaje_id.error);
+      return bien({ tipo: 'estabilizar', personaje_id });
+    }
+    case 'revivir_grupo':
+      return bien({ tipo: 'revivir_grupo' });
     case 'narrar_escena':
     case 'ver_diagrama':
     case 'deshacer_ia':

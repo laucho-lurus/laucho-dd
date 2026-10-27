@@ -16,7 +16,7 @@ const jugador = {
   caracteristicas: { fue: 8, des: 17, con: 12, int: 13, sab: 12, car: 14 }, pg_max: 9, pg_actual: 9,
   inconsciente: false, tirada_pendiente: null, ca: 14, armas: [], imagen_url: null, conectado: true,
   inventario: [], habilidades: [], equipo: {},
-  hechizos: [], pm: 0, pm_max: 0, xp: 0, xp_siguiente: 300,
+  hechizos: [], pm: 0, pm_max: 0, xp: 0, xp_siguiente: 300, muerte: null,
 };
 const contexto = (): Contexto => ({
   perfil: PERFILES_INICIALES[1],
@@ -62,7 +62,7 @@ function accionesFalsas() {
     fijarVariable: async (n, v) => (hechas.push(`var:${n}=${v}`), 'ok'),
     aplicarPg: async (p, n, m) => (hechas.push(`pg:${p}:${n}:${m}`), 'ok'),
     otorgarItem: async (p, i, n, m) => (hechas.push(`item:${p}:${i}:${n}:${m}`), 'ok'),
-    pasarTurno: async () => (hechas.push('turno'), 'ok'),
+    pasarTurno: async (o) => (hechas.push(o ? `turno:${o}` : 'turno'), 'ok'),
     otorgarXp: async (p, n, m) => (hechas.push(`xp:${p}:${n}:${m}`), 'ok'),
   };
   return { acciones, hechas };

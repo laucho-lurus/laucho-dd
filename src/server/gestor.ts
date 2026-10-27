@@ -10,6 +10,8 @@ import {
 import { generarCodigo } from './codigo.ts';
 import { rasgosDeClase } from '../rules/rasgos.ts';
 import { Progreso } from './progreso.ts';
+import { Combate, type ResumenTurnos } from './combate.ts';
+import { danoACaido, MUERTE_INICIAL, type Tirar } from '../rules/combate.ts';
 import type { DatosPersonaje, Personaje } from './repositorio.ts';
 import { validarMensaje, type MensajeCliente } from './protocolo.ts';
 import type { Repositorio, TipoEvento } from './repositorio.ts';
@@ -34,6 +36,12 @@ export interface Conexion {
 
 type Registro = (mensaje: string, err?: unknown) => void;
 
+/** Dados y azar inyectables (tests). */
+export interface OpcionesAzar {
+  tirar?: Tirar;
+  azar?: () => number;
+}
+
 export interface OpcionesIa {
   gm: GmIa | null; // null: sin API key, la IA queda desactivada
   perfiles: AlmacenPerfiles;
@@ -54,6 +62,8 @@ export class Gestor {
   private readonly ultimoChat = new WeakMap<Cliente, number>();
   private readonly criaturas = new Map<string, Promise<Plantilla[]>>(); // por campaña
   private readonly progreso: Progreso;
+  private readonly combate: Combate;
+  private readonly tirador: Tirar;
   private readonly puertosProgreso = (): ConstructorParameters<typeof Progreso>[0] => ({
     repo: this.repo,
     publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
@@ -63,12 +73,22 @@ export class Gestor {
     guardarPg: (id, pg) => this.guardarPg(id, pg),
     registro: (mensaje, err) => this.registro(mensaje, err),
     error: (mensaje) => new ErrorDeJuego(mensaje),
+    tirar: (n) => this.dado(n),
   });
 
-  constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? ''), ia?: OpcionesIa) {
+  constructor(repo: Repositorio, registro: Registro = (m, e) => console.error(m, e ?? ''), ia?: OpcionesIa, azar: OpcionesAzar = {}) {
     this.repo = repo;
     this.registro = registro;
+    this.tirador = azar.tirar ?? roll;
     this.progreso = new Progreso(this.puertosProgreso());
+    this.combate = new Combate({
+      publicar: (sala, tipo, autor, datos) => this.publicar(sala, tipo, autor, datos),
+      guardarPg: (id, pg) => this.guardarPg(id, pg),
+      guardarMonstruos: (sala) => this.guardarMonstruos(sala),
+      tirar: (n) => this.dado(n),
+      azar: azar.azar ?? Math.random,
+      error: (mensaje) => new ErrorDeJuego(mensaje),
+    });
     this.ia = ia
       ? new MesaIa(ia.gm, ia.perfiles, {
           repo,
@@ -288,12 +308,12 @@ export class Gestor {
         return this.publicar(sala, 'mensaje', autor, { texto: m.texto, personaje_nombre: nombre });
       case 'tirar': {
         if (quien.rol === 'gm') {
-          const r = tirar(m.notacion);
+          const r = this.dado(m.notacion);
           return this.publicar(sala, 'tirada', autor, { ...r, motivo: m.motivo ?? null, personaje_nombre: nombre, texto: textoTirada(nombre, r, m.motivo ?? null, null) });
         }
         const peticion = sala.tomarPeticion(quien.personaje_id);
         if (!peticion) throw new ErrorDeJuego('No tienes ninguna tirada pendiente: espera a que el GM te pida una');
-        const r = tirar(peticion.notacion);
+        const r = this.dado(this.combate.prepararTirada(sala, quien.personaje_id, peticion));
         const exito = peticion.cd === null ? null : r.total >= peticion.cd;
         if (this.ia?.responderia(sala)) sala.ia_pensando = true;
         await this.publicar(sala, 'tirada', autor, { ...r, motivo: peticion.motivo, exito, personaje_nombre: nombre, texto: textoTirada(nombre, r, peticion.motivo, exito) });
@@ -302,11 +322,12 @@ export class Gestor {
           ? ` contra la CA de ${objetivo.nombre}: ${exito ? 'ACIERTA' : 'FALLA'}`
           : ` contra CD ${peticion.cd}: ${exito ? 'ÉXITO' : 'FRACASO'}`;
         const dano = peticion.efecto === 'daño' && objetivo ? await this.danarMonstruo(sala, objetivo.id, r.total, peticion.de_ia === true) : '';
-        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.${dano ? ` ${dano}` : ''}`, sala.turnoDe() === quien.personaje_id ? quien.personaje_id : null);
+        const especial = await this.combate.trasTirada(sala, quien.personaje_id, peticion, r);
+        return this.ia?.disparar(sala, `${nombre} tiró ${peticion.motivo ?? peticion.notacion} (${r.notation}) y sacó ${r.total}${resultado}.${dano ? ` ${dano}` : ''}${especial}`, sala.turnoDe() === quien.personaje_id ? quien.personaje_id : null);
       }
       case 'pedir_tirada':
         soloGm(quien);
-        return this.pedirTirada(sala, autor, m.personaje_id, m, m.motivo ?? null, m.cd ?? null);
+        return this.pedirTirada(sala, autor, m.personaje_id, m, m.motivo ?? null, m.cd ?? null, { objetivo_monstruo: m.objetivo_monstruo ?? null, efecto: m.efecto ?? null });
       case 'narrar_escena':
         soloGm(quien);
         if (!sala.ia) throw new ErrorDeJuego('Esta sala no tiene GM IA');
@@ -414,7 +435,7 @@ export class Gestor {
       case 'usar_item': {
         const id = this.personajeDe(quien, m.personaje_id);
         const r = await this.cambiarInventario(sala, id, (inv) => beberPocion(inv, m.instancia));
-        const curacion = tirar(r.extra.curacion);
+        const curacion = this.dado(r.extra.curacion);
         // Mismo camino que el daño y la curación del GM: tope en los PG máximos y anuncio.
         // Se anuncia lo que cura de verdad (tope en PG máx.); la tirada va en el motivo.
         const falta = sala.personaje(id)!.pg_max - (sala.pgDe(id) ?? 0);
@@ -487,8 +508,26 @@ export class Gestor {
       }
       case 'siguiente_turno': {
         soloGm(quien);
-        return this.pasarTurno(sala, autor, {});
+        return void (await this.pasarTurno(sala, autor, {}));
       }
+      case 'atacar_monstruo': {
+        soloGm(quien);
+        return void (await this.combate.atacarMonstruo(sala, autor, m.monstruo_id, m.objetivo_personaje));
+      }
+      case 'opciones_combate': {
+        soloGm(quien);
+        sala.opciones = { ...sala.opciones, ...(m.enemigos_auto !== undefined && { enemigos_auto: m.enemigos_auto }), ...(m.pifias !== undefined && { pifias: m.pifias }) };
+        sala.difundir({ tipo: 'estado', estado: sala.estado() });
+        // Si se activan los enemigos automáticos en el turno de un monstruo, actúa ya.
+        if (sala.esMonstruo(sala.turnoDe()) && sala.enemigosAutomaticos()) await this.combate.atacarMonstruo(sala, 'sistema', sala.turnoDe()!, undefined);
+        return;
+      }
+      case 'estabilizar':
+        soloGm(quien);
+        return this.combate.estabilizar(sala, autor, m.personaje_id);
+      case 'revivir_grupo':
+        soloGm(quien);
+        return this.combate.revivirGrupo(sala, autor);
       default:
         throw new ErrorDeJuego('Ya estás en una sala');
     }
@@ -583,14 +622,18 @@ export class Gestor {
     return `${texto} (${r.monstruo.nombre}: ${r.monstruo.pg_actual}/${r.monstruo.pg_max} PG)`;
   }
 
-  /** Siguiente turno (salta inconscientes) con anuncio para toda la mesa. */
-  private async pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>) {
-    const r = sala.siguienteTurno();
-    if (!r.ok) throw new ErrorDeJuego(r.error);
-    const turno_de = sala.turnoDe();
-    const ronda = sala.estado().ronda;
-    const texto = `Turno de ${sala.personaje(turno_de ?? '')?.nombre ?? '?'} (ronda ${ronda}).`;
-    return this.publicar(sala, 'estado', autor, { ...extra, cambio: 'turno', turno_de, ronda, texto });
+  /** Siguiente turno con anuncio; los monstruos automáticos y los caídos se resuelven solos. */
+  private pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>): Promise<ResumenTurnos> {
+    return this.combate.pasarTurno(sala, autor, extra);
+  }
+
+  /** Tira dados con el tirador de la sala; una notación inválida es un error de juego. */
+  private dado(notacion: string) {
+    try {
+      return this.tirador(notacion);
+    } catch (err) {
+      throw new ErrorDeJuego((err as Error).message);
+    }
   }
 
   /** El GM actúa sobre el personaje que indique; un jugador, siempre sobre el suyo. */
@@ -674,6 +717,8 @@ export class Gestor {
   /** Aplica daño/curación (GM humano o IA), guarda los PG y publica el evento. */
   private async aplicarPg(sala: Sala, autor: string, personajeId: string, cantidad: number, extra: Record<string, unknown>) {
     const antes = sala.pgDe(personajeId);
+    // Daño estando a 0 PG: un fallo de salvación de muerte.
+    if (antes === 0 && cantidad < 0) sala.fijarMuerte(personajeId, danoACaido(sala.muerteDe(personajeId) ?? MUERTE_INICIAL, false));
     const r = sala.aplicarPg(personajeId, cantidad);
     if (!r.ok || antes === undefined) throw new ErrorDeJuego(r.ok ? 'Ese personaje no está en la sala' : r.error);
     await this.guardarPg(personajeId, r.pg);
@@ -704,7 +749,7 @@ export class Gestor {
       notacion = t.notacion;
       motivo = t.motivo;
     }
-    tirar(notacion); // valida la notación antes de dejarla pendiente
+    validarNotacion(notacion); // antes de dejarla pendiente (con dados reales: no gasta los de la mesa)
     const proposito = motivo?.trim() || motivoPorDefecto(notacion); // nunca sin propósito
     const monstruo = objetivo.objetivo_monstruo ? sala.monstruo(objetivo.objetivo_monstruo) : undefined;
     if (objetivo.objetivo_monstruo && !monstruo) throw new ErrorDeJuego('Ese monstruo no está en la mesa');
@@ -757,14 +802,15 @@ export class Gestor {
   }
 }
 
-function tirar(notacion: string) {
-  try {
-    return roll(notacion);
-  } catch (err) {
-    throw new ErrorDeJuego((err as Error).message);
-  }
-}
 
 function soloGm(quien: Rol) {
   if (quien.rol !== 'gm') throw new ErrorDeJuego('Solo el GM puede hacer eso');
+}
+
+function validarNotacion(notacion: string) {
+  try {
+    roll(notacion);
+  } catch (err) {
+    throw new ErrorDeJuego((err as Error).message);
+  }
 }

@@ -1,5 +1,5 @@
 // Hechizos, maná y experiencia en la sala: lanzar (validado y tirado en el servidor), dar XP, subir de nivel y descansos.
-import { roll } from '../rules/dice.ts';
+import { roll, type RollResult } from '../rules/dice.ts';
 import { HECHIZOS } from '../rules/hechizos.ts';
 import { ajustarPm, conMagia, descansarPm, gastarPm, leerMagia, pmMax, resolverHechizo } from '../rules/magia.ts';
 import { repartirXp, sumarXp } from '../rules/experiencia.ts';
@@ -18,6 +18,7 @@ export interface PuertosProgreso {
   guardarPg(personajeId: string, pg: number): Promise<void>;
   registro(mensaje: string, err?: unknown): void;
   error(mensaje: string): Error;
+  tirar?: (notacion: string) => RollResult;
 }
 
 export interface PedidoLanzar {
@@ -26,7 +27,6 @@ export interface PedidoLanzar {
   objetivo_personaje?: string;
 }
 
-const tirar = (n: string) => roll(n);
 
 export class Progreso {
   private readonly p: PuertosProgreso;
@@ -51,7 +51,7 @@ export class Progreso {
       return g.ok ? { ok: true, valor: { datos: conMagia(datos, g.valor.magia), costo: g.valor.costo, pj } } : g;
     });
     const { pj, costo } = r.extra;
-    const resultado = resolverHechizo(h, { car: pj.caracteristicas, nivel: pj.nivel, clase: pj.clase }, monstruo ? { ca: monstruo.ca } : null, tirar);
+    const resultado = resolverHechizo(h, { car: pj.caracteristicas, nivel: pj.nivel, clase: pj.clase }, monstruo ? { ca: monstruo.ca } : null, this.p.tirar ?? roll);
     const sobre = monstruo ? ` sobre ${monstruo.nombre}` : aliado && aliado !== personajeId ? ` sobre ${sala.personaje(aliado)!.nombre}` : '';
     const texto = `${r.nombre} lanza ${h.nombre}${costo ? ` (−${costo} PM)` : ''}${sobre}: ${resultado.texto}.`;
     await this.p.publicar(sala, 'estado', autor, { cambio: 'hechizo', hechizo_id: h.id, texto });

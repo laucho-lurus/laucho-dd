@@ -11,6 +11,10 @@ import { CAMPANA_DEMO_ID, DATOS_DEMO } from './demo.ts';
 import { GmIa, type ClienteIa } from '../ia/gm-ia.ts';
 import { Presupuesto } from '../ia/presupuesto.ts';
 import { Perfiles } from '../ia/perfiles.ts';
+import { roll } from '../rules/dice.ts';
+
+// d20 fijo en 10: las salvaciones de muerte no levantan a nadie por azar.
+const tirar = (n: string) => (n === '1d20' ? { notation: n, total: 10, rolls: [10], kept: [10], modifier: 0 } : roll(n));
 
 const [BRISA, TORVALD, ILYRA] = DATOS_DEMO.personajes!.map((p) => p.id);
 type Msj = Record<string, any>;
@@ -32,7 +36,7 @@ async function mesa(respuestas: Anthropic.Message[], jugadores = [BRISA, TORVALD
     },
   };
   const gm = new GmIa({ cliente, presupuesto: new Presupuesto(join(dir, 'gasto.json'), 5) });
-  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {}, { gm, perfiles: new Perfiles(join(dir, 'perfiles.json')) });
+  const gestor = new Gestor(new RepositorioMemoria(DATOS_DEMO), () => {}, { gm, perfiles: new Perfiles(join(dir, 'perfiles.json')) }, { tirar });
   const conectar = () => {
     const recibidos: Msj[] = [];
     const c = gestor.conectar({ enviar: (m) => recibidos.push(m as Msj) });
@@ -67,7 +71,7 @@ test('la IA pasa el turno con su herramienta y todos lo ven', async () => {
   assert.match(JSON.stringify(llamadas[0].messages), /Turno de Brisa \(ronda 1\)/);
 });
 
-test('el turno salta a los inconscientes y cuenta la ronda', async () => {
+test('el inconsciente tira su salvación de muerte y el turno sigue; cuenta la ronda', async () => {
   const { humano } = await mesa([], [BRISA, TORVALD, ILYRA]);
   await humano.enviar({ tipo: 'aplicar_pg', personaje_id: TORVALD, cantidad: -99 });
   await humano.enviar({ tipo: 'siguiente_turno' });

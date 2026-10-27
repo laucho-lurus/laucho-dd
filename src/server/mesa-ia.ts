@@ -7,6 +7,7 @@ import type { AlmacenPerfiles } from '../ia/perfiles.ts';
 import type { Evento, Repositorio, TipoEvento } from './repositorio.ts';
 import { intervencionVacia, SIN_INTERVENCION, unirIntervenciones, type IntervencionIa, type Sala } from './sala.ts';
 import type { Monstruo } from '../rules/monstruos.ts';
+import type { ResumenTurnos } from './combate.ts';
 import { sanear } from '../rules/imagenes.ts';
 import type { Objetivo } from '../ia/gm-ia.ts';
 
@@ -27,8 +28,8 @@ export interface Puertos {
   /** Pasa a otro nodo: efectos de la flecha, monstruos del combate y anuncio. `estricto`: respeta condiciones. */
   avanzarNodo(sala: Sala, autor: string, nodoId: string, extra: Record<string, unknown>, estricto: boolean): Promise<{ eventos: (Evento | { id: null })[]; monstruos: string[]; items: IntervencionIa['items']; resumen: string }>;
   /** Da un objeto del catálogo y lo anuncia. Devuelve la instancia para poder deshacerlo. */
-  /** Pasa el turno (salta inconscientes) y lo anuncia a la mesa. */
-  pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>): Promise<Evento | { id: null }>;
+  /** Pasa el turno y lo anuncia; resuelve solos los turnos de monstruos y caídos. */
+  pasarTurno(sala: Sala, autor: string, extra: Record<string, unknown>): Promise<ResumenTurnos>;
   /** Da XP (y sube de nivel si toca) con anuncio. */
   otorgarXp(sala: Sala, autor: string, personajeId: string, cantidad: number, extra: Record<string, unknown>): Promise<void>;
   otorgarItem(sala: Sala, autor: string, personajeId: string, pedido: { item_id: string; cantidad: number }, extra: Record<string, unknown>): Promise<{ evento: Evento | { id: null }; instancia: string; cantidad: number }>;
@@ -244,11 +245,15 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
             if (r.delta !== 0) cambiosPg.push({ personaje_id: personajeId, delta: r.delta });
             return `PG cambiados en ${r.delta} (${sala.pgDe(personajeId)} actuales)`;
           }),
-          pasarTurno: () => sala.encolar(async () => {
+          pasarTurno: (objetivo) => sala.encolar(async () => {
             try {
-              anotar(await this.puertos.pasarTurno(sala, AUTOR_IA, { ia: true, firma }));
+              if (objetivo) sala.objetivoSugerido = objetivo;
+              const r = await this.puertos.pasarTurno(sala, AUTOR_IA, { ia: true, firma });
+              r.eventos.forEach(anotar);
+              cambiosPg.push(...r.pg);
               paso = true;
-              return `Turno de ${sala.personaje(sala.turnoDe() ?? '')?.nombre ?? 'nadie'}`;
+              // El resultado mecánico ya está resuelto: la IA lo narra sin cambiarlo ni repetir el daño.
+              return `Resuelto por el servidor (narra esto sin cambiar cifras ni volver a aplicar daño): ${r.textos.join(' ')}`;
             } catch (err) {
               return (err as Error).message;
             }
@@ -287,7 +292,11 @@ El GM IA puede equivocarse: si algo no te cuadra, díselo en el chat.`;
       // Red de seguridad en combate: si la acción del que tiene el turno quedó resuelta y la IA no pasó el turno, lo pasa el servidor.
       if (actor && !paso) {
         await sala.encolar(async () => {
-          if (sala.enCombate() && sala.turnoDe() === actor && !sala.tienePeticion(actor)) anotar(await this.puertos.pasarTurno(sala, 'sistema', {}));
+          if (sala.enCombate() && sala.turnoDe() === actor && !sala.tienePeticion(actor)) {
+            const r = await this.puertos.pasarTurno(sala, 'sistema', {});
+            r.eventos.forEach(anotar);
+            cambiosPg.push(...r.pg);
+          }
         });
       }
     } catch (err) {

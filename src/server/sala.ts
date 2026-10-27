@@ -10,6 +10,7 @@ import { HECHIZOS } from '../rules/hechizos.ts';
 import { costoPm, leerMagia, pmActual, pmMax } from '../rules/magia.ts';
 import { xpSiguiente } from '../rules/experiencia.ts';
 import { cambiarNiebla, crearMapa, moverFicha, quitarFicha, validarMovimiento, vistaJugadores, type Mapa, type Posicion } from '../rules/mapa.ts';
+import { MUERTE_INICIAL, type Muerte } from '../rules/combate.ts';
 import { MAX_MONSTRUOS_VIVOS, monstruoPublico, type Monstruo, type Plantilla } from '../rules/monstruos.ts';
 
 /** GM IA de la sala: el GM humano sigue al mando y puede pausarlo. */
@@ -74,6 +75,7 @@ export interface EstadoJugador {
   pm_max: number;
   xp: number;
   xp_siguiente: number | null;
+  muerte: Muerte | null; // salvaciones de muerte mientras está a 0 PG
   imagen_url: string | null;
   conectado: boolean;
 }
@@ -86,10 +88,18 @@ export interface EstadoSala {
   orden: string[];
   turno_de: string | null;
   ronda: number;
+  turno_nombre: string | null;
+  opciones: OpcionesCombate;
   max_jugadores: number;
   monstruos: ReturnType<typeof monstruoPublico>[]; // sin cifras: los PG exactos solo los ve el GM
   mapa: Mapa | null; // vista de jugadores: sin monstruos bajo la niebla
   que_sigue: string; // franja "Qué sigue", calculada sin IA
+}
+
+/** Casillas del GM: con GM IA los enemigos siempre actúan solos. */
+export interface OpcionesCombate {
+  enemigos_auto: boolean;
+  pifias: boolean;
 }
 
 /** Tirada que el GM pidió a un jugador. La CD solo la conoce el servidor (y el GM). */
@@ -134,6 +144,14 @@ export class Sala {
   private monstruos: Monstruo[] = [];
   private mapa: Mapa | null = null;
   private proximoMonstruo = 1;
+  private readonly muertes = new Map<string, Muerte>(); // personaje_id → salvaciones de muerte (solo a 0 PG)
+  opciones: OpcionesCombate = { enemigos_auto: false, pifias: true };
+  /** Efectos pendientes de pifias y críticos de jugadores. */
+  readonly pierdeTurno = new Set<string>();
+  readonly desventaja = new Set<string>();
+  readonly critico = new Set<string>();
+  /** Objetivo que el GM o la IA sugieren para el próximo ataque de monstruo. */
+  objetivoSugerido: string | null = null;
 
   constructor(sesion: Sesion, campana: Campana, personajes: Personaje[], hashTokenGm: string | null) {
     this.sesion = sesion;
@@ -324,6 +342,7 @@ export class Sala {
     if (!p || !this.asientos.has(personajeId)) return { ok: false, error: 'Ese personaje no está en la sala' };
     const pg = Math.max(0, Math.min(p.pg_max, (this.pg.get(personajeId) ?? 0) + cantidad));
     this.pg.set(personajeId, pg);
+    if (pg > 0) this.muertes.delete(personajeId);
     return { ok: true, pg };
   }
 
@@ -333,13 +352,47 @@ export class Sala {
     return null;
   }
 
+  muerteDe(personajeId: string): Muerte | null {
+    if ((this.pg.get(personajeId) ?? 1) > 0) return null;
+    return this.muertes.get(personajeId) ?? MUERTE_INICIAL;
+  }
+
+  fijarMuerte(personajeId: string, m: Muerte) {
+    this.muertes.set(personajeId, m);
+  }
+
+  /** Con GM IA (activa) los enemigos actúan solos; con GM humano, según su casilla. */
+  enemigosAutomaticos(): boolean {
+    return Boolean(this.ia && !this.ia.pausada) || this.opciones.enemigos_auto;
+  }
+
+  esMonstruo(id: string | null): boolean {
+    return id !== null && this.monstruos.some((m) => m.id === id);
+  }
+
+  /** ¿Puede tener turno? Monstruos en pie; personajes vivos y no estabilizados (a 0 PG tiran salvación). */
+  private puedeTenerTurno(id: string): boolean {
+    const m = this.monstruos.find((x) => x.id === id);
+    if (m) return m.pg_actual > 0;
+    const muerte = this.muerteDe(id);
+    return !muerte || (!muerte.estable && !muerte.muerto);
+  }
+
+  private quitarDelOrden(id: string) {
+    const i = this.orden.indexOf(id);
+    if (i < 0) return;
+    this.orden = this.orden.filter((x) => x !== id);
+    if (i < this.turno) this.turno -= 1;
+    if (this.turno >= this.orden.length) this.turno = 0;
+  }
+
   turnoDe(): string | null {
     return this.orden[this.turno] ?? null;
   }
 
   definirOrden(orden: string[]): Resultado {
     if (new Set(orden).size !== orden.length) return error('El orden tiene personajes repetidos');
-    const ajeno = orden.find((id) => !this.asientos.has(id));
+    const ajeno = orden.find((id) => !this.asientos.has(id) && !this.esMonstruo(id));
     if (ajeno) return error('El orden incluye un personaje que no está en la sala');
     this.orden = [...orden];
     this.turno = 0;
@@ -347,7 +400,7 @@ export class Sala {
     return ok;
   }
 
-  /** Pasa al siguiente del orden, saltando a los inconscientes (0 PG). Si todos lo están, avanza uno. */
+  /** Pasa al siguiente del orden, saltando monstruos caídos y personajes estables o muertos. Si nadie puede, avanza uno. */
   siguienteTurno(): Resultado {
     if (this.orden.length === 0) return error('No hay orden de turnos');
     for (let i = 0; i < this.orden.length; i++) {
@@ -356,7 +409,7 @@ export class Sala {
         this.turno = 0;
         this.ronda += 1;
       }
-      if ((this.pg.get(this.orden[this.turno]) ?? 1) > 0) break;
+      if (this.puedeTenerTurno(this.orden[this.turno])) break;
     }
     return ok;
   }
@@ -385,6 +438,7 @@ export class Sala {
           tirada_pendiente: this.peticionPublica(id),
           ...this.equipoDerivado(p),
           ...this.magiaDerivada(p),
+          muerte: this.muerteDe(id),
           imagen_url: p.imagen_url ?? null,
           conectado: c !== null,
         };
@@ -392,6 +446,8 @@ export class Sala {
       orden: [...this.orden],
       turno_de: this.turnoDe(),
       ronda: this.ronda,
+      turno_nombre: this.nombreDe(this.turnoDe()),
+      opciones: { ...this.opciones },
       max_jugadores: MAX_JUGADORES,
       monstruos: this.monstruosVisibles().map(monstruoPublico),
       mapa: this.mapa && vistaJugadores(this.mapa, (id) => this.monstruo(id) !== undefined),
@@ -450,6 +506,7 @@ export class Sala {
   /** Restaura los monstruos guardados (servidor reiniciado). */
   cargarMonstruos(monstruos: Monstruo[]) {
     this.monstruos = monstruos.map((m) => ({ ...m }));
+    this.orden = [...this.orden.filter((id) => this.asientos.has(id)), ...monstruos.filter((m) => m.pg_actual > 0).map((m) => m.id)];
     const numeros = monstruos.map((m) => Number(m.id.slice(1))).filter(Number.isFinite);
     this.proximoMonstruo = Math.max(0, ...numeros) + 1;
   }
@@ -479,6 +536,7 @@ export class Sala {
       imagen_url: p.imagen_url ?? null,
     }));
     this.monstruos = [...this.monstruos, ...nuevos];
+    this.orden = [...this.orden, ...nuevos.map((m) => m.id)]; // los enemigos actúan tras el grupo
     return { ok: true, nuevos };
   }
 
@@ -497,6 +555,7 @@ export class Sala {
   quitarMonstruo(id: string): Resultado {
     if (!this.monstruo(id)) return error('Ese monstruo no está en la mesa');
     this.monstruos = this.monstruos.filter((m) => m.id !== id);
+    this.quitarDelOrden(id);
     if (this.mapa) this.mapa = quitarFicha(this.mapa, id);
     return ok;
   }
@@ -522,6 +581,11 @@ export class Sala {
       : { ...this.ia, ultima: unirIntervenciones(this.ia.ultima, extra) };
   }
 
+  nombreDe(id: string | null): string | null {
+    if (!id) return null;
+    return this.personajes.get(id)?.nombre ?? this.monstruos.find((m) => m.id === id)?.nombre ?? null;
+  }
+
   /** Qué toca ahora, en orden de prioridad: tirada pendiente, IA, turno de un jugador o el GM. */
   queSigue(): string {
     for (const [id, p] of this.peticiones) {
@@ -530,6 +594,7 @@ export class Sala {
     if (this.ia && this.ia_pensando) return 'IA pensando…';
     if (this.ia?.pausada) return 'IA pausada: el GM humano decide';
     const turno = this.turnoDe();
+    if (this.esMonstruo(turno)) return `Turno de ${this.nombreDe(turno)} (enemigo): ${this.enemigosAutomaticos() ? 'ataca solo' : 'el GM decide su ataque'}`;
     if (turno) return `Turno de ${this.personajes.get(turno)?.nombre ?? '?'}: escribe tu acción`;
     return 'Turno del GM';
   }
